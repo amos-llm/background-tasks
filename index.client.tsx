@@ -14,7 +14,14 @@ export default function contribute(client: PluginClientContext) {
 
   function publish(agentId: string) {
     const state = states.get(agentId);
-    if (state) pills.get(agentId)?.update({ label: state.error ? "后台任务 · !" : `后台任务 · ${state.tasks.length}` });
+    const agent = agents.get(agentId);
+    const pill = pills.get(agentId);
+    if (state && agent?.workspaceId && state.tasks.length > 0) {
+      const label = state.error ? "后台任务 · !" : `后台任务 · ${state.tasks.length}`;
+      if (pill) pill.update({ label });
+      else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
+        button: { title: "后台任务", label, icon: "Terminal", behavior: { kind: "popover", Content: TaskList } } }));
+    } else if (pill) { pill.remove(); pills.delete(agentId); }
     for (const listener of listeners) listener();
   }
   function refresh(agentId: string): Promise<void> {
@@ -23,9 +30,9 @@ export default function contribute(client: PluginClientContext) {
     const request = (async () => {
       try {
         const result = await client.rpc(listTasks, { agentId });
-        if (!disposed && agents.has(agentId)) states.set(agentId, { ...result, error: null, loading: false });
+        if (!disposed && states.has(agentId)) states.set(agentId, { ...result, error: null, loading: false });
       } catch (error) {
-        if (!disposed && agents.has(agentId)) states.set(agentId, { ...(states.get(agentId) ?? { tasks: [], supported: true }), loading: false, error: String(error) });
+        if (!disposed && states.has(agentId)) states.set(agentId, { ...states.get(agentId)!, loading: false, error: String(error) });
       } finally { pending.delete(agentId); if (!disposed) publish(agentId); }
     })();
     pending.set(agentId, request);
@@ -57,12 +64,15 @@ export default function contribute(client: PluginClientContext) {
 
   function reconcile() {
     if (disposed) return;
-    for (const [id, pill] of pills) if (!agents.has(id)) { pill.remove(); pills.delete(id); states.delete(id); }
+    for (const [id] of states) {
+      const agent = agents.get(id);
+      if (!agent?.workspaceId || !["codex", "pi"].includes(agent.provider) || agent.archivedAt) {
+        pills.get(id)?.remove(); pills.delete(id); states.delete(id);
+      }
+    }
     for (const agent of agents.values()) {
-      if (!agent.workspaceId || !["codex", "pi"].includes(agent.provider) || agent.archivedAt || pills.has(agent.id)) continue;
+      if (!agent.workspaceId || !["codex", "pi"].includes(agent.provider) || agent.archivedAt || states.has(agent.id)) continue;
       states.set(agent.id, { tasks: [], error: null, supported: true, loading: true });
-      pills.set(agent.id, client.addComposerPill({ id: `tasks-${agent.id}`, workspaceId: agent.workspaceId, agentId: agent.id,
-        button: { title: "后台任务", label: "后台任务 · …", icon: "Terminal", behavior: { kind: "popover", Content: TaskList } } }));
       void refresh(agent.id);
     }
   }
@@ -79,6 +89,6 @@ export default function contribute(client: PluginClientContext) {
     } });
     return () => { unsubscribe(); void result.subscription.release(); };
   }).catch((error) => console.error("Background task subscription failed", error));
-  const timer = setInterval(() => { for (const id of pills.keys()) void refresh(id); }, 2000);
+  const timer = setInterval(() => { for (const id of states.keys()) void refresh(id); }, 2000);
   return async () => { disposed = true; clearInterval(timer); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
 }
