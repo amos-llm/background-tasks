@@ -61,6 +61,18 @@ async function waitGone(pid: number, timeout = 6000) {
   }
   assert.fail("process " + pid + " remained alive");
 }
+test("live task elapsed time tracks the process lifetime", async () => {
+  const id = randomUUID(); const api = service(id); const started = performance.now(); const running = await job(id);
+  try {
+    const first = (await api.list()).tasks[0];
+    assert.ok(first, "task should be listed");
+    assert.ok(first.elapsedSeconds >= 0 && first.elapsedSeconds < (performance.now() - started) / 1000 + 0.5);
+    await delay(1200);
+    const second = (await api.list()).tasks[0];
+    assert.ok(second.elapsedSeconds - first.elapsedSeconds >= 1);
+    assert.ok(second.elapsedSeconds < (performance.now() - started) / 1000 + 0.5);
+  } finally { cleanupJob(running.child); await running.exited; api.cleanup(); }
+});
 test("live tasks stop their group; forged and cross-agent tokens cannot signal", async () => {
   const id = randomUUID(); const api = service(id); const running = await job(id);
   try {
