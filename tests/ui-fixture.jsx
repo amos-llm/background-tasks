@@ -11,12 +11,12 @@ const task = {
   endedAt: mode === "ended" ? Date.now() : null, pid: 100, exitCode: mode === "ended" ? 0 : null, exitSignal: null,
   logBytes: 40000, logTruncated: false, error: null,
 };
-const second = { ...task, id: "e24c2613-f14b-463b-9def-880fc8d37204", command: "npm run dev -- --port 3000" };
+const second = { ...task, id: "e24c2613-f14b-463b-9def-880fc8d37204", command: "npm run dev -- --port 3000", label: "开发服务", instruction: "检查服务退出原因。" };
 const tasks = [task, second, { ...task, id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
 const agent = { id: "test", workspaceId: "workspace", provider: "pi" };
 let update = () => {}, pill = null, log = null, popoverOpen = false, sidebarOpen = mode === "restore";
 const tab = { state: mode === "restore" ? { taskId: second.id } : {}, setState(state) { this.state = state; } };
-window.uiTest = { requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, command: task.command,
+window.uiTest = { requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, command: task.command,
   finish() { for (const item of tasks) { item.state = "completed"; item.endedAt = Date.now(); item.exitCode = 0; } },
   savedTask() { return tab.state.taskId; },
 };

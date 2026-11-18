@@ -232,7 +232,7 @@ test("the same attached tool definitions execute for Pi and Codex and isolate ca
     const attached = await hook({ request });
     assert.equal(attached.tools.length, 5);
     const tools = new Map<string, AgentToolDefinition>(attached.tools.map((tool: AgentToolDefinition) => [tool.name, tool]));
-    const context = { agent, paseo: {} as any, signal: new AbortController().signal };
+    const context = { agent, paseo: { agents: { ref: () => ({ refresh: async () => {}, current: () => ({ provider, status: "running" }) }) } } as any, signal: new AbortController().signal };
     const start = tools.get("task_start")!;
     const result = await start.execute(start.input.parse({ command: "printf 'original output\n'" }), context);
     const task = (result.structuredContent as any).task;
@@ -246,7 +246,7 @@ test("the same attached tool definitions execute for Pi and Codex and isolate ca
   assert.equal(await hook({ request: { provider: "pi", purpose: "history", tools: [] } }), undefined);
   assert.equal(await create({ request: { config: { provider: "claude" } } }), undefined);
   assert.equal(await create({ request: { config: { provider: "pi", internal: true } } }), undefined);
-  unregister();
+  await unregister();
   assert.equal(hooks.size, 0);
 });
 

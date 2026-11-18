@@ -1,21 +1,25 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
-import { isActiveTask, managedTaskSchema, taskIdSchema, type LogPage, type ManagedTask } from "../shared/managed";
+import { isActiveTask, managedTaskSchema, taskIdSchema, type LogPage, type ManagedTask, type taskStartInput } from "../shared/managed";
 import { readProcess, snapshot } from "./processes";
 import { runnerSource } from "./runner";
 
-const recordSchema = managedTaskSchema.omit({ logBytes: true }).extend({
+const recordSchema = managedTaskSchema.omit({ logBytes: true, notificationStatus: true }).extend({
   agentId: z.string(), runnerPid: z.number().nullable(), runnerStart: z.string().nullable(),
   start: z.string().nullable(), timeoutSeconds: z.number().optional(), maxLogBytes: z.number(),
   stopReason: z.string().nullable(),
+  // Old records predate automatic notifications and must never wake an agent retroactively.
+  notifyOnExit: z.boolean().default(false),
 });
 type Record = z.infer<typeof recordSchema>;
 export interface TaskOwner { id: string; provider: string; cwd: string }
+type StartOptions = z.input<typeof taskStartInput>;
+export interface TaskCompletion { agentId: string; task: ManagedTask }
 export interface StoreOptions {
   root?: string; maxLogBytes?: number; totalLogBytes?: number; retentionDays?: number; maxConcurrent?: number;
 }
@@ -91,15 +95,16 @@ export class ManagedTaskStore {
     try { return (await stat(join(this.directory(record.agentId, record.id), "output.log"))).size; }
     catch (error) { if (missing(error)) return 0; throw error; }
   }
-  private async view(record: Record) {
+  private async view(record: Record): Promise<ManagedTask> {
     const result = publicTask(record, await this.bytes(record));
+    result.notificationStatus = await this.notificationStatus(record);
     if (isActiveTask(result)) {
       const runner = record.runnerPid ? await readProcess(record.runnerPid) : null;
       const alive = runner && runner.start === record.runnerStart && runner.managedTaskId === record.id && runner.agentId === record.agentId && runner.state !== "Z" && runner.state !== "X";
       if (!alive && Date.now() - record.createdAt > 5000) {
         // The runner may have finalized the metadata between our read and its exit.
         const latest = await this.record(record.agentId, record.id);
-        if (!isActiveTask(latest)) return publicTask(latest, await this.bytes(latest));
+        if (!isActiveTask(latest)) return this.view(latest);
         result.state = "unknown";
         result.logTruncated = true;
         result.error = "任务 runner 已退出，日志采集可能中断，无法确认退出码；已保存日志仍可查看";
@@ -125,12 +130,46 @@ export class ManagedTaskStore {
   }
   async get(agentId: string, taskId: string) { return this.view(await this.record(agentId, taskId)); }
 
-  start(owner: TaskOwner, input: { command: string; cwd?: string; timeoutSeconds?: number }): Promise<ManagedTask> {
+  private async notificationStatus(record: Record): Promise<NonNullable<ManagedTask["notificationStatus"]>> {
+    if (!record.notifyOnExit) return "disabled";
+    try {
+      return z.enum(["delivered", "cancelled"]).parse(JSON.parse(await readFile(join(this.directory(record.agentId, record.id), "notification.json"), "utf8")).status);
+    } catch (error) { if (missing(error)) return "pending"; throw error; }
+  }
+  async pendingCompletions(agentId?: string): Promise<TaskCompletion[]> {
+    const pending: TaskCompletion[] = [];
+    for (const record of await this.entries(agentId)) {
+      if (!record.notifyOnExit || record.stopReason === "user") continue;
+      const task = await this.view(record);
+      if (!isActiveTask(task) && task.notificationStatus === "pending") pending.push({ agentId: record.agentId, task });
+    }
+    return pending.sort((a, b) => a.task.createdAt - b.task.createdAt || a.task.id.localeCompare(b.task.id));
+  }
+  async settleNotification(agentId: string, id: string, status: "delivered" | "cancelled") {
+    await this.record(agentId, id);
+    // A separate, write-once receipt cannot be overwritten by the independent runner.
+    // In particular, a cancellation wins over a later delivery acknowledgement.
+    const directory = this.directory(agentId, id);
+    const temporary = join(directory, `.notification-${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, JSON.stringify({ status, at: Date.now() }), { mode: 0o600, flag: "wx" });
+      // Publish the complete receipt atomically without replacing a competing receipt.
+      try { await link(temporary, join(directory, "notification.json")); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    } finally { await rm(temporary, { force: true }); }
+  }
+  async cancelNotifications(agentId: string, before = Date.now()) {
+    for (const record of await this.entries(agentId)) {
+      if (record.notifyOnExit && record.createdAt <= before) await this.settleNotification(agentId, record.id, "cancelled");
+    }
+  }
+
+  start(owner: TaskOwner, input: StartOptions): Promise<ManagedTask> {
     const request = this.queue.then(() => this.startUnlocked(owner, input));
     this.queue = request.catch(() => {});
     return request;
   }
-  private async startUnlocked(owner: TaskOwner, input: { command: string; cwd?: string; timeoutSeconds?: number }) {
+  private async startUnlocked(owner: TaskOwner, input: StartOptions) {
     if (process.platform !== "linux") throw new Error("受管后台任务需要 Linux 主机");
     if (owner.provider !== "codex" && owner.provider !== "pi") throw new Error("仅支持 Codex 和 Pi 会话");
     const cwd = await realpath(resolve(owner.cwd, input.cwd ?? "."));
@@ -150,6 +189,7 @@ export class ManagedTaskStore {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const record: Record = {
       id, agentId: owner.id, provider: owner.provider, command: input.command, cwd,
+      label: input.label, instruction: input.instruction, notifyOnExit: input.notifyOnExit ?? true,
       state: "starting", createdAt: Date.now(), endedAt: null, pid: null, start: null,
       runnerPid: null, runnerStart: null, exitCode: null, exitSignal: null,
       maxLogBytes: this.maxLogBytes, timeoutSeconds: input.timeoutSeconds,
@@ -187,6 +227,7 @@ export class ManagedTaskStore {
   }
   async stop(agentId: string, id: string) {
     const record = await this.record(agentId, id);
+    await this.settleNotification(agentId, id, "cancelled");
     if (!isActiveTask(record) && record.state !== "unknown") return false;
     const runner = record.runnerPid ? await readProcess(record.runnerPid) : null;
     if (runner && runner.start === record.runnerStart && runner.managedTaskId === id && runner.agentId === agentId && runner.state !== "Z" && runner.state !== "X") {

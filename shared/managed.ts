@@ -7,6 +7,8 @@ export const managedStateSchema = z.enum([
 ]);
 export const managedTaskSchema = z.object({
   id: taskIdSchema, command: z.string(), cwd: z.string(), provider: z.enum(["codex", "pi"]),
+  label: z.string().optional(), instruction: z.string().optional(), notifyOnExit: z.boolean().optional(),
+  notificationStatus: z.enum(["disabled", "pending", "delivered", "cancelled"]).optional(),
   state: managedStateSchema, createdAt: z.number(), endedAt: z.number().nullable(),
   pid: z.number().nullable(), exitCode: z.number().nullable(), exitSignal: z.string().nullable(),
   logBytes: z.number(), logTruncated: z.boolean(), error: z.string().nullable(),
@@ -49,6 +51,9 @@ export const taskStartInput = z.object({
   command: z.string().trim().min(1).max(65536).describe("Original foreground command. Do not append &, tail or output-limiting grep; use task_logs to inspect output."),
   cwd: z.string().min(1).optional().describe("Working directory; defaults to the calling agent's directory."),
   timeoutSeconds: z.number().int().min(1).max(604800).optional(),
+  label: z.string().trim().min(1).max(120).optional().describe("Short task name."),
+  instruction: z.string().trim().min(1).max(2000).optional().describe("What to do when the task finishes, for example inspect failed tests and continue the original task."),
+  notifyOnExit: z.boolean().default(true).describe("Automatically resume the owning agent with a bounded completion summary when idle. Do not sleep or poll just to wait. Set false only when deliberately monitoring completion yourself."),
 });
 export const taskLogsInput = z.object({
   taskId: taskIdSchema, tailLines: z.number().int().min(1).max(1000).default(20),

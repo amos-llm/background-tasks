@@ -7,12 +7,15 @@ import { readProcess, selectTasks, snapshot } from "./server/processes";
 import { deleteManagedTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation } from "./shared/managed";
 import { ManagedTaskStore } from "./server/managed";
 import { registerTaskTools } from "./server/tools";
+import { TaskCompletionNotifier } from "./server/notifications";
 
 export default function contribute(server: PluginServerContext) {
   const managed = new ManagedTaskStore();
-  const removeTools = registerTaskTools(server, managed);
+  const notifier = new TaskCompletionNotifier(managed);
+  const removeTools = registerTaskTools(server, managed, notifier);
   async function checkAgent(agentId: string, paseo: PluginHandlerContext["paseo"]) {
     if (process.platform !== "linux") throw new Error("受管后台任务需要 Linux 主机");
+    notifier.connect(paseo);
     const agent = paseo.agents.ref(agentId);
     await agent.refresh();
     if (!agent.current() || !["codex", "pi"].includes(agent.current()!.provider)) throw new Error("会话不可用");
@@ -98,5 +101,5 @@ export default function contribute(server: PluginServerContext) {
   });
   const cleanupTimer = setInterval(() => { void managed.cleanup().catch(error => console.error("Background task cleanup failed", error)); }, 60_000);
   cleanupTimer.unref();
-  return () => { removeTools(); clearInterval(cleanupTimer); for (const timer of timers) clearTimeout(timer); tokens.clear(); };
+  return () => { const drained = removeTools(); clearInterval(cleanupTimer); for (const timer of timers) clearTimeout(timer); tokens.clear(); return drained; };
 }

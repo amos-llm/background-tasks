@@ -29,10 +29,10 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
   onSelect(): void; onStop(): void;
 }) {
   return <View style={[styles.row, { borderColor: theme.colors.border, backgroundColor: selected ? theme.colors.surface2 : undefined }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${task.command}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
+    <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${task.label ?? task.command}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
       onPress={onSelect} style={[styles.rowContent, compact && styles.touchRow]}>
       <View style={styles.titleLine}>
-        <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: theme.colors.foreground }]}>{task.command}</Text>
+        <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: theme.colors.foreground }]}>{task.label ?? task.command}</Text>
         <Icon name="ChevronRight" size={14} color={theme.colors.foregroundMuted} />
       </View>
       <Text style={[styles.meta, { color: theme.colors.foregroundMuted }]}>
@@ -140,7 +140,7 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
       <Pressable accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
         accessibilityState={{ expanded: details }} aria-expanded={details} onPress={() => setDetails(value => !value)} style={styles.summaryTitle}>
         <View style={styles.titleLine}>
-          <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: colors.foreground }]}>{currentTask.command}</Text>
+          <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: colors.foreground }]}>{currentTask.label ?? currentTask.command}</Text>
           <Icon name={details ? "ChevronUp" : "ChevronDown"} size={14} color={colors.foregroundMuted} />
         </View>
         <Text style={[styles.meta, { color: colors.foregroundMuted }]}>
@@ -152,6 +152,7 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
     </View>
     {details && <ScrollView style={[styles.details, { backgroundColor: colors.surface2 }]} contentContainerStyle={styles.detailContent}>
       <Text selectable style={[styles.command, { color: colors.foreground }]}>{currentTask.command}</Text>
+      {currentTask.instruction && <Text selectable style={[styles.meta, { color: colors.foregroundMuted }]}>完成后：{currentTask.instruction}</Text>}
       <Text selectable style={[styles.meta, { color: colors.foregroundMuted }]}>
         工作目录：{currentTask.cwd}{"\n"}PID：{currentTask.pid ?? "—"} · 日志：{(totalBytes / 1024).toFixed(1)} KiB
         {"\n"}已加载字节：{window?.start ?? 0}–{window?.end ?? 0} · 显示窗口最多 2 MiB

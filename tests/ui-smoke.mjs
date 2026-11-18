@@ -101,7 +101,7 @@ try {
 
   async function openTask(second = false) {
     await click("后台任务列表");
-    const label = await evaluate(second ? "'查看日志 npm run dev -- --port 3000'" : "'查看日志 ' + window.uiTest.command");
+    const label = await evaluate(second ? "'查看日志 ' + window.uiTest.secondLabel" : "'查看日志 ' + window.uiTest.command");
     await click(label);
     await waitFor("document.body.innerText.includes('第 200 行')");
   }
@@ -138,6 +138,9 @@ try {
   await openTask(true);
   await waitFor("window.uiTest.savedTask() === window.uiTest.secondId && document.querySelector('aside').innerText.includes('任务二正常运行')");
   assert.equal(await evaluate("window.uiTest.requests.at(-1).taskId"), await evaluate("window.uiTest.secondId"));
+  assert.ok(await evaluate("document.querySelector('aside').innerText.includes('开发服务')"));
+  await click("任务详情");
+  assert.ok(await evaluate("document.querySelector('aside').innerText.includes('npm run dev -- --port 3000') && document.querySelector('aside').innerText.includes('完成后：检查服务退出原因。')"));
   console.log("PASS: running-only list opens logs beside the conversation, closes the popover, and switches the saved task");
 
   await navigate("restore", 1280, 800);
