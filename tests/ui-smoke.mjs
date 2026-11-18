@@ -115,7 +115,7 @@ try {
   assert.ok(controls.every(control => control.height >= 44 && control.right <= 390));
   assert.equal(await evaluate("!!document.querySelector('[aria-expanded=true]')"), false, "long command details should start collapsed");
   await screenshot("mobile");
-  await click("暂停跟随日志"); await delay(600);
+  await evaluate("(() => { const el = [...document.querySelectorAll('aside *')].find(el => el.scrollHeight > el.clientHeight + 100 && el.innerText.includes('第 200 行')); el.scrollTop = 0; el.dispatchEvent(new Event('scroll', { bubbles: true })); })()"); await waitFor("document.body.innerText.includes('已暂停跟随')"); await delay(600);
   const requestsBefore = await evaluate("window.uiTest.requests.length");
   await evaluate("window.uiTest.finish()");
   await waitFor("document.body.innerText.includes('已完成') && !document.querySelector('[aria-label=\"后台任务列表\"]')");
@@ -168,7 +168,7 @@ try {
   await click(await evaluate("'查看日志 ' + window.uiTest.command"));
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.equal(await evaluate("innerWidth"), 320);
-  await click("更多"); await click("展开任务详情");
+  await click("任务详情");
   assert.ok(await evaluate("document.body.innerText.includes('工作目录：')"));
   await evaluate("window.uiTest.finish()");
   await waitFor("document.body.innerText.includes('日志已结束')");

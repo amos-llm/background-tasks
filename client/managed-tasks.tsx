@@ -60,6 +60,7 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
   const scroll = useRef<NativeScrollView>(null);
+  const lastScrollY = useRef(0);
   const loadRef = useRef<(direction: Direction) => Promise<void>>(async () => {});
   const [notice, setNotice] = useState<string | null>(null);
   const [details, setDetails] = useState(false);
@@ -114,7 +115,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   const currentTask = latestTask(task, window?.task);
   const totalBytes = Math.max(currentTask.logBytes, window?.totalBytes ?? 0);
   const hasNewOutput = !!window && totalBytes > window.end;
-  const canPause = following && isActiveTask(currentTask);
   const colors = theme.colors;
   function follow() {
     followingRef.current = true; setFollowing(true);
@@ -163,11 +163,8 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         {following ? isActiveTask(currentTask) ? "实时跟随" : "日志已结束" : hasNewOutput ? "有新日志" : "已暂停跟随"}
       </Text>
       <View style={styles.primaryActions}>
-        <Action label={canPause ? "暂停" : following ? "到底部" : "回到底部"} accessibilityLabel={canPause ? "暂停跟随日志" : "回到底部并跟随日志"}
-          compact={compact} theme={theme} onPress={() => {
-            if (canPause) { followingRef.current = false; setFollowing(false); } else follow();
-          }} />
-        <Action label="复制" accessibilityLabel="复制已加载日志" compact={compact} disabled={!text} theme={theme} onPress={() => void copy()} />
+        {!following && <Action label="回到底部" accessibilityLabel="回到底部并跟随日志"
+          compact={compact} theme={theme} onPress={follow} />}
         <Action label="更多" compact={compact} theme={theme} onPress={() => { setConfirmDelete(false); setMore(true); }} />
       </View>
     </View>
@@ -183,9 +180,10 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
     <ScrollView ref={scroll} style={[styles.output, { backgroundColor: colors.surface1 }]} contentContainerStyle={styles.outputContent}
       scrollEventThrottle={100} onScroll={(event) => {
         const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-        if (contentOffset.y + layoutMeasurement.height < contentSize.height - 40 && followingRef.current) {
+        if (contentOffset.y < lastScrollY.current && contentOffset.y + layoutMeasurement.height < contentSize.height - 40 && followingRef.current) {
           followingRef.current = false; setFollowing(false);
         }
+        lastScrollY.current = contentOffset.y;
       }} onContentSizeChange={() => { if (followingRef.current) scroll.current?.scrollToEnd({ animated: false }); }}>
       {window && window.start > 0 && <Action label="加载更早日志" disabled={busy} theme={theme} compact={compact} onPress={() => {
         followingRef.current = false; setFollowing(false); void loadRef.current("before");
@@ -204,9 +202,8 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
           <Action label={deleting ? "删除中…" : "确认永久删除"} danger compact theme={theme} disabled={deleting} onPress={() => void remove()} />
           <Action label="取消" compact theme={theme} disabled={deleting} onPress={() => setConfirmDelete(false)} />
         </> : <>
-          <Action label={details ? "收起任务详情" : "展开任务详情"} compact theme={theme} onPress={() => { setDetails(value => !value); setMore(false); }} />
+          <Action label="复制已加载日志" compact theme={theme} disabled={!text} onPress={() => { setMore(false); void copy(); }} />
           <Action label="复制原始日志路径" compact theme={theme} onPress={() => void copyLocation()} />
-          <Action label="刷新到最新日志" compact theme={theme} onPress={() => { setMore(false); follow(); }} />
           {!isActiveTask(currentTask) && <Action label="删除任务和日志" compact danger theme={theme} onPress={() => setConfirmDelete(true)} />}
         </>}
       </Modal.Content>

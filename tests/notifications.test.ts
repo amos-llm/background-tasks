@@ -52,9 +52,9 @@ async function fixture(t: TestContext) {
   return { root, store, owner, snapshots, current: snapshots.get(owner.id), paseo, notifier, sent, errors, attemptedMessages,
     failNext: () => { failures++; }, attempts: () => attempts };
 }
-const events = (message: { text: string }) => JSON.parse(message.text.slice(message.text.indexOf("\n") + 1)) as any[];
+const events = (message: { text: string }) => (message.text.match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? []).map(taskId => ({ taskId }));
 
-test("busy agents queue results; idle delivery batches success and failure with bounded tails and saved instructions", async t => {
+test("busy agents queue results; idle delivery sends short notices with results available through task status", async t => {
   const f = await fixture(t);
   const first = await f.store.start(f.owner, { command: node("for(let i=0;i<300;i++)console.log('line-'+i)"), label: "Tests", instruction: "Inspect failures and continue." });
   const second = await f.store.start(f.owner, { command: "printf 'failure-marker\\n'; exit 7" });
@@ -68,13 +68,10 @@ test("busy agents queue results; idle delivery batches success and failure with 
   assert.equal(f.sent.length, 1);
   const delivered = events(f.sent[0]);
   assert.deepEqual(new Set(delivered.map(event => event.taskId)), new Set([first.id, second.id]));
-  assert.equal(delivered.find(event => event.taskId === first.id).instruction, "Inspect failures and continue.");
-  assert.equal(delivered.find(event => event.taskId === first.id).label, "Tests");
-  assert.equal(delivered.find(event => event.taskId === second.id).exitCode, 7);
-  assert.equal(delivered.find(event => event.taskId === first.id).output.includes("line-299"), true);
-  assert.equal(delivered.find(event => event.taskId === first.id).output.includes("line-0\n"), false);
-  assert.equal(delivered.find(event => event.taskId === first.id).outputTruncated, true);
-  assert.ok(Buffer.byteLength(f.sent[0].text) <= 32768);
+  assert.ok(f.sent[0].text.includes("task_status"));
+  assert.ok(!f.sent[0].text.includes("line-299") && !f.sent[0].text.includes("Inspect failures"));
+  assert.equal((await f.store.get(f.owner.id, first.id)).instruction, "Inspect failures and continue.");
+  assert.equal((await f.store.get(f.owner.id, second.id)).exitCode, 7);
   assert.equal(f.sent[0].options.activeTurnBehavior, "steer");
   assert.equal((await f.store.get(f.owner.id, first.id)).notificationStatus, "delivered");
   assert.equal((await f.store.get(f.owner.id, disabled.id)).notificationStatus, "disabled");
@@ -156,7 +153,7 @@ test("closed or permission-blocked agents are not woken; archiving cancels pendi
   assert.equal((await f.store.get(f.owner.id, task.id)).notificationStatus, "cancelled");
 });
 
-test("large UTF-8 and escaped output is split into bounded batches without dropping completions", async t => {
+test("large output and instructions stay out of completion notices without dropping completions", async t => {
   const f = await fixture(t);
   const tasks = [];
   for (let i = 0; i < 8; i++) {
@@ -166,7 +163,7 @@ test("large UTF-8 and escaped output is split into bounded batches without dropp
   f.current.status = "idle";
   for (let i = 0; i < 8 && (await f.store.pendingCompletions()).length; i++) await f.notifier.flush();
   assert.equal((await f.store.pendingCompletions()).length, 0);
-  assert.ok(f.sent.length > 1);
+  assert.equal(f.sent.length, 1);
   const delivered = f.sent.flatMap(message => events(message));
   assert.deepEqual(new Set(delivered.map(event => event.taskId)), new Set(tasks.map(task => task.id)));
   assert.equal(delivered.length, tasks.length);

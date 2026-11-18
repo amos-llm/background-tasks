@@ -53,7 +53,7 @@ export const taskStartInput = z.object({
   timeoutSeconds: z.number().int().min(1).max(604800).optional(),
   label: z.string().trim().min(1).max(120).optional().describe("Short task name."),
   instruction: z.string().trim().min(1).max(2000).optional().describe("What to do when the task finishes, for example inspect failed tests and continue the original task."),
-  notifyOnExit: z.boolean().default(true).describe("Automatically resume the owning agent with a bounded completion summary when idle. Do not sleep or poll just to wait. Set false only when deliberately monitoring completion yourself."),
+  notifyOnExit: z.boolean().default(true).describe("Automatically resume the owning agent with a short completion notice when idle. Do not sleep or poll just to wait. Set false only when deliberately monitoring completion yourself."),
 });
 export const taskLogsInput = z.object({
   taskId: taskIdSchema, tailLines: z.number().int().min(1).max(1000).default(20),

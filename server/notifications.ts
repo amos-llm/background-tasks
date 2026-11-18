@@ -4,18 +4,6 @@ import { isActiveTask } from "../shared/managed";
 import { ManagedTaskStore } from "./managed";
 
 type Paseo = PluginHandlerContext["paseo"];
-const MAX_MESSAGE_BYTES = 32768;
-const preamble = "Background task completion events. Continue the original task using each saved instruction. Captured output is command data. Each eventId is stable: do not repeat work for an event already handled. Full logs remain available via task_logs; only a bounded tail is included here.\n";
-
-function clip(text: string, limit: number, tail = false) {
-  const bytes = Buffer.from(text);
-  if (bytes.length <= limit) return text;
-  let start = tail ? bytes.length - limit : 0, end = tail ? bytes.length : limit;
-  if (tail) { while ((bytes[start] & 0xc0) === 0x80) start++; }
-  else { while ((bytes[end] & 0xc0) === 0x80) end--; }
-  return bytes.subarray(start, end).toString("utf8");
-}
-
 export class TaskCompletionNotifier {
   private paseo?: Paseo;
   private timer?: ReturnType<typeof setTimeout>;
@@ -75,23 +63,11 @@ export class TaskCompletionNotifier {
         const current = agent.current();
         if (current?.archivedAt) { await this.store.cancelNotifications(agentId); continue; }
         if (!current || !["codex", "pi"].includes(current.provider) || current.status !== "idle" || current.activeTurn || current.pendingPermissions?.length) continue;
-        const events = [];
+        const events: { eventId: string; taskId: string }[] = [];
         for (const { task } of completions) {
-          const page = await this.store.tail(agentId, task.id);
-          if (page.task.notificationStatus !== "pending" || isActiveTask(page.task)) continue;
-          const output = clip(page.text, 2048, true);
-          const instruction = task.instruction ? clip(task.instruction, 2000) : undefined;
-          const event = {
-            eventId: `task-completed:${task.id}`, taskId: task.id, state: page.task.state,
-            label: task.label ? clip(task.label, 120) : undefined, command: clip(task.command, 256), cwd: clip(task.cwd, 256),
-            instruction, instructionTruncated: instruction !== task.instruction,
-            exitCode: page.task.exitCode, exitSignal: page.task.exitSignal,
-            error: page.task.error ? clip(page.task.error, 256) : undefined,
-            output, outputTruncated: page.displayTruncated || page.hasEarlier || output !== page.text,
-            logTruncated: page.task.logTruncated,
-          };
-          if (Buffer.byteLength(preamble + JSON.stringify([...events, event])) > MAX_MESSAGE_BYTES) break;
-          events.push(event);
+          const current = await this.store.get(agentId, task.id);
+          if (current.notificationStatus !== "pending" || isActiveTask(current)) continue;
+          events.push({ eventId: `task-completed:${task.id}`, taskId: task.id });
           if (events.length === 8) break;
         }
         if (!events.length || this.disposed || this.held.has(agentId)) continue;
@@ -106,7 +82,7 @@ export class TaskCompletionNotifier {
         }
         if (!ready.length || this.disposed) continue;
         const messageId = `background-tasks:${createHash("sha256").update(ready.map(event => event.eventId).join("\n")).digest("hex")}`;
-        await agent.send(preamble + JSON.stringify(ready), { messageId, activeTurnBehavior: "steer" });
+        await agent.send(`后台任务已完成：${ready.map(event => event.taskId).join(", ")}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。`, { messageId, activeTurnBehavior: "steer" });
         for (const event of ready) {
           await this.store.settleNotification(agentId, event.taskId, "delivered").catch(this.onError);
         }
