@@ -77,7 +77,7 @@ export default function contribute(client: PluginClientContext) {
       onStopManaged={task => void stop(task)} onOpenLogs={taskId => {
         if (taskId) selectedTasks.set(agentId, taskId);
         publish(agentId); props.close();
-        client.openPanel("task-logs", { workspaceId: props.workspaceId, agentId });
+        client.openPanel("task-logs", { workspaceId: props.workspaceId, agentId, location: "explorer" });
       }} />;
   }
 
@@ -102,9 +102,9 @@ export default function contribute(client: PluginClientContext) {
         selectedTasks.delete(agentId); props.tab.setState({}); await refresh(agentId);
       }} />;
   }
-  const removePanel = client.addAgentPanel({ id: "task-logs", title: "后台任务与日志", icon: "Terminal", Component: TaskPanel });
+  const removePanel = client.addAgentPanel({ id: "task-logs", title: "后台任务与日志", icon: "Terminal", locations: ["explorer"], Component: TaskPanel });
   const removeCommand = client.addCommandCenterItem({ id: "task-logs", context: "agent", title: "后台任务与历史日志", icon: "Terminal",
-    onSelect(context) { context.openPanel("task-logs"); } });
+    onSelect(context) { context.openPanel("task-logs", { location: "explorer" }); } });
 
   function reconcile() {
     if (disposed) return;
