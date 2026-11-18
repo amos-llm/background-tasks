@@ -1,11 +1,43 @@
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginServerContext, PluginHandlerContext } from "@getpaseo/plugin/server";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { listTasks, stopTask } from "./shared/tasks";
 import { readProcess, selectTasks, snapshot } from "./server/processes";
+import { deleteManagedTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation } from "./shared/managed";
+import { ManagedTaskStore } from "./server/managed";
+import { registerTaskTools } from "./server/tools";
 
 export default function contribute(server: PluginServerContext) {
+  const managed = new ManagedTaskStore();
+  const removeTools = registerTaskTools(server, managed);
+  async function checkAgent(agentId: string, paseo: PluginHandlerContext["paseo"]) {
+    if (process.platform !== "linux") throw new Error("受管后台任务需要 Linux 主机");
+    const agent = paseo.agents.ref(agentId);
+    await agent.refresh();
+    if (!agent.current() || !["codex", "pi"].includes(agent.current()!.provider)) throw new Error("会话不可用");
+  }
+  server.handle(listManagedTasks, async ({ agentId }, { paseo }) => {
+    if (process.platform !== "linux") return { tasks: [], supported: false, retentionDays: managed.retentionDays };
+    await checkAgent(agentId, paseo);
+    return { tasks: await managed.list(agentId), supported: true, retentionDays: managed.retentionDays };
+  });
+  server.handle(readTaskLog, async ({ agentId, taskId, ...options }, { paseo }) => {
+    await checkAgent(agentId, paseo);
+    return managed.readLog(agentId, taskId, options);
+  });
+  server.handle(stopManagedTask, async ({ agentId, taskId }, { paseo }) => {
+    await checkAgent(agentId, paseo);
+    return { stopped: await managed.stop(agentId, taskId) };
+  });
+  server.handle(deleteManagedTask, async ({ agentId, taskId }, { paseo }) => {
+    await checkAgent(agentId, paseo);
+    return { deleted: await managed.delete(agentId, taskId) };
+  });
+  server.handle(taskLogLocation, async ({ agentId, taskId }, { paseo }) => {
+    await checkAgent(agentId, paseo);
+    return { path: await managed.logLocation(agentId, taskId) };
+  });
   const tokens = new Map<string, { agentId: string; pid: number; start: string; toolId: string; seen: number }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const ticks = process.platform === "linux" ? Number(execFileSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).trim()) : 100;
@@ -64,5 +96,7 @@ export default function contribute(server: PluginServerContext) {
     timer.unref(); timers.add(timer); tokens.delete(token); cached = undefined;
     return { stopped: true };
   });
-  return () => { for (const timer of timers) clearTimeout(timer); tokens.clear(); };
+  const cleanupTimer = setInterval(() => { void managed.cleanup().catch(error => console.error("Background task cleanup failed", error)); }, 60_000);
+  cleanupTimer.unref();
+  return () => { removeTools(); clearInterval(cleanupTimer); for (const timer of timers) clearTimeout(timer); tokens.clear(); };
 }

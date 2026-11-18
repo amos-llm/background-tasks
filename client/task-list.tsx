@@ -3,12 +3,16 @@ import { Icon } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Task } from "../shared/tasks";
+import { isActiveTask, type ManagedTask } from "../shared/managed";
+import { Action, ManagedRow } from "./managed-tasks";
 
 export interface TaskListState {
   tasks: Task[];
   error: string | null;
   supported: boolean;
   loading: boolean;
+  managedTasks: ManagedTask[];
+  retentionDays: number;
 }
 interface TaskPopoverProps {
   state?: TaskListState;
@@ -18,6 +22,8 @@ interface TaskPopoverProps {
   actionError: string | null;
   onRefresh(): Promise<void>;
   onStop(task: Task): void;
+  onStopManaged(task: ManagedTask): void;
+  onOpenLogs(taskId?: string): void;
 }
 const monoFont = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -83,13 +89,15 @@ function TaskRow({ task, theme, compact, stopping, disabled, onStop }: {
     </Pressable>
   </View>;
 }
-export function TaskPopover({ state, theme, compact, stopping, actionError, onRefresh, onStop }: TaskPopoverProps) {
+export function TaskPopover({ state, theme, compact, stopping, actionError, onRefresh, onStop, onStopManaged, onOpenLogs }: TaskPopoverProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshHovered, setRefreshHovered] = useState(false);
   const colors = theme.colors;
   const error = actionError || state?.error;
   const loading = !state || state.loading;
   const busy = refreshing || loading;
+  const managed = state?.managedTasks.filter(isActiveTask) ?? [];
+  const count = (state?.tasks.length ?? 0) + managed.length;
   async function refresh() {
     setRefreshing(true);
     try { await onRefresh(); } finally { setRefreshing(false); }
@@ -97,7 +105,7 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
   return <View style={[styles.popover, compact && styles.popoverCompact]}>
     <View style={styles.toolbar}>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>
-        当前会话{!loading && state?.supported ? " · " + state.tasks.length + " 个任务" : ""}
+        当前会话{!loading && state?.supported ? " · " + count + " 个任务" : ""}
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -121,6 +129,7 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Icon name="CircleAlert" size={14} color={colors.statusDanger} />
       <Text selectable style={[styles.errorText, { color: colors.statusDanger }]}>{error}</Text>
     </View>}
+    <Action label="全部受管任务 / 历史日志" theme={theme} onPress={() => onOpenLogs()} />
     {loading ? <View style={styles.message}>
       <ActivityIndicator size="small" color={colors.foregroundMuted} />
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>正在获取任务…</Text>
@@ -128,15 +137,18 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Icon name="CircleAlert" size={20} color={colors.foregroundMuted} />
       <Text style={[styles.messageTitle, { color: colors.foreground }]}>暂不支持此主机</Text>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>需要连接 Linux 主机查看进程。</Text>
-    </View> : state.tasks.length === 0 && !error ? <View style={styles.empty}>
+    </View> : count === 0 && !error ? <View style={styles.empty}>
       <Icon name="Terminal" size={20} color={colors.foregroundMuted} />
       <Text style={[styles.messageTitle, { color: colors.foreground }]}>没有后台任务</Text>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>当前会话没有正在运行的命令</Text>
     </View> : <View style={styles.list}>
+      {managed.map(task => <ManagedRow key={task.id} task={task} theme={theme}
+        stopping={stopping === task.id} onSelect={() => onOpenLogs(task.id)} onStop={() => onStopManaged(task)} />)}
       {state.tasks.map((task) => <TaskRow key={task.token} task={task} theme={theme} compact={compact}
         stopping={stopping === task.token} disabled={stopping !== null || !!state.error}
         onStop={() => onStop(task)} />)}
     </View>}
+    {!!state?.tasks.length && <Text style={[styles.caption, { color: colors.foregroundMuted }]}>外部任务仅提供进程信息；完整日志需要通过 task_start 启动。</Text>}
   </View>;
 }
 // Paseo 0.15 menu spacing (4/8/12), md radius (6), sm/base typography

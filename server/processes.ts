@@ -2,7 +2,7 @@ import { readdir, readFile, readlink } from "node:fs/promises";
 
 export interface ProcessInfo {
   pid: number; ppid: number; group: number; start: string; state: string;
-  args: string[]; agentId: string; threadId: string; toolId: string; cwd: string;
+  args: string[]; agentId: string; threadId: string; toolId: string; cwd: string; managedTaskId?: string;
 }
 export function parseStat(value: string) {
   // comm may contain spaces and closing parentheses.
@@ -20,7 +20,8 @@ export async function readProcess(pid: number): Promise<ProcessInfo | null> {
       const split = item.indexOf("="); return [item.slice(0, split), item.slice(split + 1)];
     }));
     return { pid, ...parseStat(stat), args: command.split("\0").filter(Boolean), cwd,
-      agentId: env.PASEO_AGENT_ID ?? "", threadId: env.CODEX_THREAD_ID ?? "", toolId: env.CODEX_TOOL_CALL_ID ?? "" };
+      agentId: env.PASEO_AGENT_ID ?? "", threadId: env.CODEX_THREAD_ID ?? "", toolId: env.CODEX_TOOL_CALL_ID ?? "",
+      managedTaskId: env.PASEO_MANAGED_TASK_ID ?? "" };
   } catch { return null; }
 }
 export async function snapshot(): Promise<ProcessInfo[]> {
@@ -33,7 +34,7 @@ export async function snapshot(): Promise<ProcessInfo[]> {
   return result;
 }
 export function selectTasks(all: ProcessInfo[], agentId: string, provider: string, threadId: string | null) {
-  const own = all.filter((p) => p.agentId === agentId && p.state !== "Z" && p.state !== "X");
+  const own = all.filter((p) => p.agentId === agentId && !p.managedTaskId && p.state !== "Z" && p.state !== "X");
   const groups = new Map<number, ProcessInfo[]>();
   for (const p of own) {
     if (provider === "codex" && (!p.toolId || !threadId || p.threadId !== threadId)) continue;

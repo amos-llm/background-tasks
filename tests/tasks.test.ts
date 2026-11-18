@@ -25,6 +25,7 @@ test("Codex deduplicates groups and isolates agents, threads and infrastructure"
   assert.equal(selectTasks([...all, proc({ pid: 102, agentId: "other" })], "a", "codex", "thread").length, 0);
   assert.equal(selectTasks([...all, proc({ pid: 102, toolId: "other" })], "a", "codex", "thread").length, 0);
   assert.equal(selectTasks([proc({ state: "Z" })], "a", "codex", "thread").length, 0);
+  assert.equal(selectTasks([proc({ managedTaskId: "managed" })], "a", "codex", "thread").length, 0);
 });
 test("Pi detects direct shell tasks and exec commands, excluding MCP runtimes", () => {
   const runtime = proc({ pid: 50, group: 1, args: ["node", "/usr/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js", "--mode", "rpc"], toolId: "" });
@@ -34,7 +35,7 @@ test("Pi detects direct shell tasks and exec commands, excluding MCP runtimes", 
 });
 function service(agentId: string) {
   const handlers = new Map<string, (input: any, context: any) => Promise<any>>();
-  const cleanup = contribute({ handle(contract: { name: string }, handler: any) { handlers.set(contract.name, handler); } } as PluginServerContext);
+  const cleanup = contribute({ handle(contract: { name: string }, handler: any) { handlers.set(contract.name, handler); }, addHook() { return () => {}; } } as unknown as PluginServerContext);
   const context = { paseo: { agents: { ref: () => ({ refresh: async () => {}, current: () => ({ provider: "codex" }), runtimeInfo: { sessionId: "test-thread" } }) } } };
   return {
     list: () => handlers.get(listTasks.name)!({ agentId }, context),
