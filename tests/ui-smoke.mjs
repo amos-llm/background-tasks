@@ -21,7 +21,10 @@ const pending = new Map();
 function call(method, params = {}) {
   return new Promise((resolve, reject) => {
     const id = ++sequence;
-    pending.set(id, { resolve, reject });
+    const timer = setTimeout(() => {
+      pending.delete(id); reject(new Error(`Chrome did not respond to ${method}`));
+    }, 10000);
+    pending.set(id, { resolve, reject, timer });
     socket.send(JSON.stringify({ id, method, params }));
   });
 }
@@ -84,6 +87,8 @@ try {
     const message = JSON.parse(event.data);
     if (!message.id) return;
     const request = pending.get(message.id); pending.delete(message.id);
+    if (!request) return;
+    clearTimeout(request.timer);
     if (message.error) request.reject(new Error(JSON.stringify(message.error))); else request.resolve(message.result);
   });
   await call("Page.enable");
@@ -94,43 +99,87 @@ try {
     await delay(600);
   }
 
+  async function openTask(second = false) {
+    await click("后台任务列表");
+    const label = await evaluate(second ? "'查看日志 npm run dev -- --port 3000'" : "'查看日志 ' + window.uiTest.command");
+    await click(label);
+    await waitFor("document.body.innerText.includes('第 200 行')");
+  }
+
   await navigate("running", 390, 844);
+  assert.equal(await evaluate("window.uiTest.requests.length"), 0, "logs should not load until a list entry is selected");
+  await openTask();
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.equal(await evaluate("innerWidth"), 390, "mobile toolbar must not expand the viewport");
-  const controls = await evaluate("[...document.querySelectorAll('[role=button]')].filter(el=>el.getBoundingClientRect().top>=0&&el.getBoundingClientRect().top<150).map(el=>({height:el.getBoundingClientRect().height,right:el.getBoundingClientRect().right}))");
+  const controls = await evaluate("[...document.querySelector('aside').querySelectorAll('[role=button]')].filter(el=>!el.closest('header')&&el.getBoundingClientRect().top>=0&&el.getBoundingClientRect().top<180).map(el=>({height:el.getBoundingClientRect().height,right:el.getBoundingClientRect().right}))");
   assert.ok(controls.every(control => control.height >= 44 && control.right <= 390));
   assert.equal(await evaluate("!!document.querySelector('[aria-expanded=true]')"), false, "long command details should start collapsed");
   await screenshot("mobile");
   await click("暂停跟随日志"); await delay(600);
   const requestsBefore = await evaluate("window.uiTest.requests.length");
-  await evaluate("window.uiTest.finish()"); await delay(900);
+  await evaluate("window.uiTest.finish()");
+  await waitFor("document.body.innerText.includes('已完成') && !document.querySelector('[aria-label=\"后台任务列表\"]')");
   assert.equal(await evaluate("window.uiTest.requests.length"), requestsBefore, "completing a task must not remount a paused viewer");
   assert.ok(await evaluate("document.body.innerText.includes('已完成') && !document.body.innerText.includes('运行中 ·') && document.body.innerText.includes('已暂停跟随')"));
-  console.log("PASS: mobile sizing, collapsed details, paused completion keeps status fresh and preserves the viewer");
+  console.log("PASS: mobile row-to-log flow, sizing, and paused completion removes running entry without remounting logs");
 
-  await navigate("history", 1280, 800);
-  await waitFor("document.querySelector('[role=tab][aria-selected=true]')?.textContent === '历史 2'");
-  assert.ok(await evaluate("!document.body.innerText.includes('暂无任务') && document.body.innerText.includes('第 200 行')"));
-  assert.ok(await evaluate("!document.querySelector('[role=tab][aria-selected=true]').hasAttribute('aria-disabled')"));
+  await navigate("running", 1280, 800);
+  await click("后台任务列表");
+  assert.ok(await evaluate("!document.body.innerText.includes('completed-history-task') && !document.querySelector('[role=tablist]')"));
+  assert.equal(await evaluate("window.uiTest.requests.length"), 0);
+  await click(await evaluate("'查看日志 ' + window.uiTest.command"));
+  await waitFor("document.body.innerText.includes('第 200 行')");
+  assert.deepEqual(await evaluate("window.uiTest.opens[0]"), { id: "task-logs", workspaceId: "workspace", agentId: "test", location: "explorer" });
+  assert.equal(await evaluate("window.uiTest.commands.length"), 0, "there should be no standalone task panel command");
+  assert.ok(await evaluate("document.querySelector('main').getBoundingClientRect().width > 0 && document.querySelector('aside').getBoundingClientRect().right === 1280"));
+  assert.equal(await evaluate("document.querySelector('aside').querySelector('[role=tablist], [aria-label=\"返回任务列表\"]')"), null);
+  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表弹层\"]')"), false);
   await screenshot("desktop");
-  console.log("PASS: desktop history default, automatic selection and enabled selected tab");
+  await openTask(true);
+  await waitFor("window.uiTest.savedTask() === window.uiTest.secondId && document.querySelector('aside').innerText.includes('任务二正常运行')");
+  assert.equal(await evaluate("window.uiTest.requests.at(-1).taskId"), await evaluate("window.uiTest.secondId"));
+  console.log("PASS: running-only list opens logs beside the conversation, closes the popover, and switches the saved task");
 
-  await navigate("history", 320, 700);
-  assert.equal(await evaluate("innerWidth"), 320);
-  assert.equal(await evaluate("window.uiTest.requests.length"), 0, "mobile history opens the list before reading a task");
-  await screenshot("mobile-list");
-  await click("日志");
-  await waitFor("!!document.querySelector('[aria-label=\"返回任务列表\"]')");
-  await click("返回任务列表");
-  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"返回任务列表\"]')"), false);
-  await click("日志"); await click("更多");
-  assert.ok(await evaluate("!!document.querySelector('[role=dialog]')"));
-  await click("删除任务和日志"); assert.equal(await evaluate("window.uiTest.deleted"), 0);
-  await click("取消"); await click("展开任务详情");
-  assert.ok(await evaluate("document.body.innerText.includes('工作目录：')"));
-  console.log("PASS: 320px list/detail/back navigation, more menu, details and delete confirmation");
+  await navigate("restore", 1280, 800);
+  await waitFor("document.querySelector('aside')?.innerText.includes('任务二正常运行')");
+  assert.ok(await evaluate("window.uiTest.requests.every(request => request.taskId === window.uiTest.secondId)"));
+  console.log("PASS: restored sidebar reads the previously selected task directly");
+
+  await navigate("ended", 1280, 800);
+  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false);
+  assert.equal(await evaluate("window.uiTest.requests.length"), 0);
+  assert.equal(await evaluate("!!document.querySelector('aside')"), false);
+  console.log("PASS: completed tasks do not create a history entry or open logs");
+
+  await navigate("running", 1280, 800);
+  await click("后台任务列表"); await click("终止");
+  assert.equal(await evaluate("window.uiTest.opens.length"), 0, "stopping a task must not activate its log row");
+  assert.equal(await evaluate("window.uiTest.requests.length"), 0);
+  assert.ok(await evaluate("!document.querySelector('[aria-label=\"后台任务列表弹层\"]').innerText.includes('日志演示开始')"));
+  console.log("PASS: stop remains a separate action and the stopped task disappears from the list");
 
   await navigate("running", 320, 700);
+  assert.equal(await evaluate("innerWidth"), 320);
+  await click("后台任务列表");
+  await screenshot("mobile-list");
+  await click(await evaluate("'查看日志 ' + window.uiTest.command"));
+  await waitFor("document.body.innerText.includes('第 200 行')");
+  assert.equal(await evaluate("innerWidth"), 320);
+  await click("更多"); await click("展开任务详情");
+  assert.ok(await evaluate("document.body.innerText.includes('工作目录：')"));
+  await evaluate("window.uiTest.finish()");
+  await waitFor("document.body.innerText.includes('日志已结束')");
+  await click("更多");
+  assert.ok(await evaluate("!!document.querySelector('[role=dialog]')"));
+  await click("删除任务和日志"); assert.equal(await evaluate("window.uiTest.deleted"), 0);
+  await click("取消"); await click("删除任务和日志"); await click("确认永久删除");
+  await waitFor("document.body.innerText.includes('从后台任务列表选择任务查看日志')");
+  assert.equal(await evaluate("window.uiTest.deleted"), 1);
+  assert.ok(await evaluate("window.uiTest.requests.every(request => request.taskId === window.uiTest.taskId)"), "deletion must not automatically open another task");
+  console.log("PASS: 320px row-to-log navigation, details, delete confirmation and no automatic task fallback");
+
+  await navigate("running", 320, 700);
+  await openTask();
   await click("加载更早日志"); await click("回到底部并跟随日志"); await delay(1000);
   const requests = await evaluate("window.uiTest.requests");
   const historyIndex = requests.findIndex(request => request.before !== undefined);

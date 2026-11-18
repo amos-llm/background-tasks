@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Task } from "../shared/tasks";
 import { isActiveTask, type ManagedTask } from "../shared/managed";
-import { Action, ManagedRow } from "./managed-tasks";
+import { ManagedRow } from "./managed-tasks";
 
 export interface TaskListState {
   tasks: Task[];
@@ -12,7 +12,6 @@ export interface TaskListState {
   supported: boolean;
   loading: boolean;
   managedTasks: ManagedTask[];
-  retentionDays: number;
 }
 interface TaskPopoverProps {
   state?: TaskListState;
@@ -23,7 +22,7 @@ interface TaskPopoverProps {
   onRefresh(): Promise<void>;
   onStop(task: Task): void;
   onStopManaged(task: ManagedTask): void;
-  onOpenLogs(taskId?: string): void;
+  onOpenLogs(taskId: string): void;
 }
 const monoFont = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -129,7 +128,6 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Icon name="CircleAlert" size={14} color={colors.statusDanger} />
       <Text selectable style={[styles.errorText, { color: colors.statusDanger }]}>{error}</Text>
     </View>}
-    <Action label="全部任务与历史日志" theme={theme} compact={compact} onPress={() => onOpenLogs()} />
     {loading ? <View style={styles.message}>
       <ActivityIndicator size="small" color={colors.foregroundMuted} />
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>正在获取任务…</Text>

@@ -1,11 +1,4 @@
-import { isActiveTask, type ManagedTask } from "../shared/managed";
-
-export type TaskTab = "running" | "ended";
-export function taskTab(task: ManagedTask): TaskTab { return isActiveTask(task) ? "running" : "ended"; }
-export function defaultTaskTab(tasks: ManagedTask[], selectedId: string | null): TaskTab {
-  const selected = tasks.find(task => task.id === selectedId);
-  return selected ? taskTab(selected) : tasks.some(isActiveTask) || tasks.length === 0 ? "running" : "ended";
-}
+import type { ManagedTask } from "../shared/managed";
 // Log polling and the task directory have independent refresh intervals. Never let an
 // older running snapshot hide a completed task, including while log following is paused.
 export function latestTask(directory: ManagedTask, log?: ManagedTask): ManagedTask {

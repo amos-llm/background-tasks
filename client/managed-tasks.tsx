@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text, View, type ScrollView as NativeScrollView } from "react-native";
 import { isActiveTask, type LogPage, type ManagedTask } from "../shared/managed";
 import { mergeLogPage, plainLog, type LogWindow } from "./log-format";
-import { defaultTaskTab, elapsedTime, latestTask, taskTab, type TaskTab } from "./task-presentation";
+import { elapsedTime, latestTask } from "./task-presentation";
 
 export const stateLabels: Record<ManagedTask["state"], string> = {
   starting: "启动中", running: "运行中", completed: "已完成", failed: "失败", stopped: "已终止",
@@ -31,12 +31,14 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
   return <View style={[styles.row, { borderColor: theme.colors.border, backgroundColor: selected ? theme.colors.surface2 : undefined }]}>
     <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${task.command}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
       onPress={onSelect} style={[styles.rowContent, compact && styles.touchRow]}>
-      <Text numberOfLines={1} style={[styles.command, { color: theme.colors.foreground }]}>{task.command}</Text>
+      <View style={styles.titleLine}>
+        <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: theme.colors.foreground }]}>{task.command}</Text>
+        <Icon name="ChevronRight" size={14} color={theme.colors.foregroundMuted} />
+      </View>
       <Text style={[styles.meta, { color: theme.colors.foregroundMuted }]}>
         {stateLabels[task.state]} · {elapsedTime(task)}{task.exitCode !== null ? ` · 退出码 ${task.exitCode}` : ""}
       </Text>
     </Pressable>
-    <Action label="日志" theme={theme} compact={compact} onPress={onSelect} />
     {(isActiveTask(task) || task.state === "unknown") && <Action label={stopping ? "终止中" : "终止"} theme={theme}
       compact={compact} danger disabled={stopping} onPress={onStop} />}
   </View>;
@@ -44,9 +46,9 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
 export type ReadLog = (input: { agentId: string; taskId: string; before?: number; after?: number; limit?: number }) => Promise<LogPage>;
 type Direction = "replace" | "before" | "after";
 
-function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stopping, onBack, onStop, onDelete }: {
+function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stopping, onStop, onDelete }: {
   agentId: string; task: ManagedTask; theme: PluginTheme; readLog: ReadLog; compact: boolean;
-  logLocation(taskId: string): Promise<string>; stopping: boolean; onBack?(): void;
+  logLocation(taskId: string): Promise<string>; stopping: boolean;
   onStop(): void; onDelete(): Promise<void>;
 }) {
   const [window, setWindow] = useState<LogWindow | null>(null);
@@ -135,7 +137,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   }
   return <View style={styles.viewer}>
     <View style={styles.summary}>
-      {onBack && <Action label="任务" icon="ArrowLeft" accessibilityLabel="返回任务列表" compact={compact} theme={theme} onPress={onBack} />}
       <Pressable accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
         accessibilityState={{ expanded: details }} aria-expanded={details} onPress={() => setDetails(value => !value)} style={styles.summaryTitle}>
         <View style={styles.titleLine}>
@@ -212,78 +213,30 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   </View>;
 }
 
-export function ManagedTaskPanel({ agentId, tasks, selectedId, theme, error, loading, stopping, retentionDays, compact = false,
-  onSelect, onStop, onDelete, onRefresh, readLog, logLocation }: {
-  agentId: string; tasks: ManagedTask[]; selectedId: string | null; theme: PluginTheme; error?: string | null;
-  loading: boolean; stopping: string | null; retentionDays: number; compact?: boolean;
-  onSelect(id: string | null): void; onStop(task: ManagedTask): void; onDelete(task: ManagedTask): Promise<void>;
+export function TaskLogSidebar({ agentId, task, theme, error, loading, stopping, compact = false,
+  onStop, onDelete, onRefresh, readLog, logLocation }: {
+  agentId: string; task?: ManagedTask; theme: PluginTheme; error?: string | null;
+  loading: boolean; stopping: string | null; compact?: boolean;
+  onStop(task: ManagedTask): void; onDelete(task: ManagedTask): Promise<void>;
   onRefresh(): void; readLog: ReadLog; logLocation(taskId: string): Promise<string>;
 }) {
   const [width, setWidth] = useState(0);
   const narrow = compact || width < 720;
-  const [requestedTab, setTab] = useState<TaskTab | null>(null);
-  const explicit = tasks.find(task => task.id === selectedId);
-  const tab = requestedTab ?? defaultTaskTab(tasks, selectedId);
-  useEffect(() => { if (explicit) setTab(taskTab(explicit)); }, [selectedId, explicit?.state]);
-  const running = tasks.filter(isActiveTask), ended = tasks.filter(task => !isActiveTask(task));
-  const filtered = tab === "running" ? running : ended;
-  // Keep the same viewer mounted across running -> ended while the filter catches up.
-  // Switching filters explicitly clears the selection through chooseTab().
-  const selected = explicit ?? filtered[0];
-  const showDetail = !narrow || !!explicit;
-  // Persist a desktop's automatic selection so later arrivals do not replace the log being read.
-  useEffect(() => { if (!narrow && !loading && selected && !explicit) onSelect(selected.id); }, [narrow, loading, selected?.id, explicit?.id, onSelect]);
-  function chooseTab(value: TaskTab) { if (value !== tab) { setTab(value); onSelect(null); } }
-  return <View style={styles.panel} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-    {error && <Text selectable accessibilityRole="alert" style={[styles.meta, { color: theme.colors.statusDanger }]}>{error}</Text>}
-    <View style={[styles.workspace, narrow && styles.narrowWorkspace]}>
-      {(!narrow || !showDetail) && <View style={[styles.sidebar, narrow && styles.narrowSidebar,
-        !narrow && { borderRightColor: theme.colors.border, borderRightWidth: StyleSheet.hairlineWidth }]}>
-        <View style={styles.listHeading}>
-          <Text style={[styles.heading, { color: theme.colors.foreground }]}>后台任务</Text>
-          <Action label="刷新" compact={narrow} theme={theme} onPress={onRefresh} disabled={loading} />
-        </View>
-        <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: theme.colors.surface1 }]}>
-          {([["running", `运行中 ${running.length}`], ["ended", `历史 ${ended.length}`]] as const).map(([value, label]) =>
-            <Pressable key={value} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: tab === value }} aria-selected={tab === value}
-              onPress={() => chooseTab(value)} style={[styles.tab, narrow && styles.touchAction,
-                tab === value && { backgroundColor: theme.colors.surface2, borderColor: theme.colors.border }]}>
-              <Text style={{ fontSize: 12, fontWeight: tab === value ? "600" : "400", color: tab === value ? theme.colors.foreground : theme.colors.foregroundMuted }}>{label}</Text>
-            </Pressable>)}
-        </View>
-        <ScrollView style={styles.taskList} contentContainerStyle={styles.taskListContent}>
-          {filtered.length ? filtered.map(task => <ManagedRow key={task.id} task={task} theme={theme} compact={narrow}
-            selected={!narrow && selected?.id === task.id} stopping={stopping === task.id} onSelect={() => onSelect(task.id)} onStop={() => onStop(task)} />)
-            : <View style={styles.emptyList}>
-              <Icon name="Terminal" color={theme.colors.foregroundMuted} size={24} />
-              <Text style={{ color: theme.colors.foreground }}>{loading ? "正在获取任务…" : tab === "running" ? "没有运行中的任务" : "暂无历史任务"}</Text>
-              <Text style={[styles.meta, { color: theme.colors.foregroundMuted }]}>
-                {tab === "running" && ended.length ? "已结束任务可在“历史”中查看日志。" : "让 agent 启动后台任务后，会在这里显示。"}
-              </Text>
-            </View>}
-        </ScrollView>
-        <Text style={[styles.meta, styles.retention, { color: theme.colors.foregroundMuted }]}>历史日志保留 {retentionDays} 天</Text>
+  return <View style={styles.logSidebar} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+    {error && <View style={styles.errorRow}>
+      <Text selectable accessibilityRole="alert" style={[styles.meta, styles.flexText, { color: theme.colors.statusDanger }]}>{error}</Text>
+      <Action label="重试" compact={narrow} theme={theme} onPress={onRefresh} disabled={loading} />
+    </View>}
+    {task ? <LogViewer key={`${agentId}:${task.id}`} agentId={agentId} task={task} theme={theme} compact={narrow}
+      stopping={stopping === task.id} onStop={() => onStop(task)} onDelete={() => onDelete(task)} readLog={readLog} logLocation={logLocation} />
+      : <View style={styles.empty}>
+        {loading ? <ActivityIndicator color={theme.colors.foregroundMuted} /> : <Icon name="Terminal" color={theme.colors.foregroundMuted} size={24} />}
+        <Text style={{ color: theme.colors.foregroundMuted }}>{loading ? "正在加载任务…" : "从后台任务列表选择任务查看日志"}</Text>
       </View>}
-      {showDetail && <View style={styles.detailPane}>
-        {selected ? <LogViewer key={`${agentId}:${selected.id}`} agentId={agentId} task={selected} theme={theme} compact={narrow}
-          stopping={stopping === selected.id} onBack={narrow ? () => onSelect(null) : undefined} onStop={() => onStop(selected)}
-          onDelete={() => onDelete(selected)} readLog={readLog} logLocation={logLocation} />
-          : <View style={styles.empty}><Icon name="Terminal" color={theme.colors.foregroundMuted} size={24} />
-            <Text style={{ color: theme.colors.foregroundMuted }}>选择任务查看日志</Text></View>}
-      </View>}
-    </View>
   </View>;
 }
 const styles = StyleSheet.create({
-  panel: { flex: 1, minHeight: 280, minWidth: 0 },
-  workspace: { flex: 1, minHeight: 0, minWidth: 0, flexDirection: "row" },
-  narrowWorkspace: { flexDirection: "column" },
-  sidebar: { width: 304, maxWidth: "42%", minHeight: 0, padding: 12, gap: 10 },
-  narrowSidebar: { flex: 1, width: "100%", maxWidth: "100%" },
-  listHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  heading: { fontSize: 14, fontWeight: "600" },
-  tabs: { flexDirection: "row", padding: 3, borderRadius: 8, gap: 3 },
-  tab: { flex: 1, minWidth: 0, minHeight: 32, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "transparent", borderRadius: 6 },
+  logSidebar: { flex: 1, minHeight: 280, minWidth: 0, padding: 12, gap: 10 },
   action: { minHeight: 32, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row", gap: 4, alignItems: "center", justifyContent: "center" },
   touchAction: { minHeight: 44, minWidth: 44 },
@@ -295,10 +248,6 @@ const styles = StyleSheet.create({
   command: { fontFamily: monoFont, fontSize: 12, lineHeight: 18 },
   meta: { fontSize: 12, lineHeight: 18 },
   flexText: { flex: 1, minWidth: 0 },
-  taskList: { flex: 1, minHeight: 0 },
-  taskListContent: { gap: 2 },
-  retention: { paddingTop: 4 },
-  detailPane: { flex: 1, minWidth: 0, minHeight: 0, padding: 12 },
   viewer: { flex: 1, minWidth: 0, minHeight: 0, gap: 10 },
   summary: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
   summaryTitle: { flex: 1, minWidth: 0, gap: 2, paddingVertical: 4 },
@@ -312,5 +261,4 @@ const styles = StyleSheet.create({
   outputContent: { padding: 10, gap: 8 },
   outputText: { fontFamily: monoFont, fontSize: 12, lineHeight: 18 },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  emptyList: { paddingVertical: 32, alignItems: "center", gap: 10 },
 });

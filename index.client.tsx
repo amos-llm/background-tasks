@@ -4,7 +4,7 @@ import { listTasks, stopTask, type Task } from "./shared/tasks";
 
 import { TaskPopover, type TaskListState } from "./client/task-list";
 import { deleteManagedTask, isActiveTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
-import { ManagedTaskPanel, type ReadLog } from "./client/managed-tasks";
+import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
 
 export default function contribute(client: PluginClientContext) {
   let disposed = false;
@@ -35,7 +35,7 @@ export default function contribute(client: PluginClientContext) {
     const request = (async () => {
       try {
         const [result, managed] = await Promise.all([client.rpc(listTasks, { agentId }), client.rpc(listManagedTasks, { agentId })]);
-        if (!disposed && states.has(agentId)) states.set(agentId, { ...result, managedTasks: managed.tasks, retentionDays: managed.retentionDays, error: null, loading: false });
+        if (!disposed && states.has(agentId)) states.set(agentId, { ...result, managedTasks: managed.tasks, error: null, loading: false });
       } catch (error) {
         if (!disposed && states.has(agentId)) states.set(agentId, { ...states.get(agentId)!, loading: false, error: String(error) });
       } finally { pending.delete(agentId); if (!disposed) publish(agentId); }
@@ -75,26 +75,22 @@ export default function contribute(client: PluginClientContext) {
     return <TaskPopover state={state} theme={props.theme} compact={props.layout.compact}
       stopping={stopping} actionError={error} onRefresh={() => refresh(agentId)} onStop={(task) => void stop(task)}
       onStopManaged={task => void stop(task)} onOpenLogs={taskId => {
-        if (taskId) selectedTasks.set(agentId, taskId);
+        selectedTasks.set(agentId, taskId);
         publish(agentId); props.close();
         client.openPanel("task-logs", { workspaceId: props.workspaceId, agentId, location: "explorer" });
       }} />;
   }
 
-  function TaskPanel(props: PluginAgentPanelProps) {
+  function TaskLog(props: PluginAgentPanelProps) {
     const agentId = props.params.agentId;
     const { stopping, error, stop } = useActions(agentId);
     const state = states.get(agentId);
     const savedId = props.tab.state && typeof props.tab.state === "object" && "taskId" in props.tab.state && typeof props.tab.state.taskId === "string" ? props.tab.state.taskId : null;
-    return <ManagedTaskPanel agentId={agentId} tasks={state?.managedTasks ?? []} theme={props.theme}
+    const taskId = selectedTasks.get(agentId) ?? savedId;
+    useEffect(() => { if (taskId) props.tab.setState({ taskId }); }, [taskId]);
+    return <TaskLogSidebar agentId={agentId} task={state?.managedTasks.find(task => task.id === taskId)} theme={props.theme}
       compact={props.layout.compact}
-      selectedId={selectedTasks.get(agentId) ?? savedId} stopping={stopping}
-      loading={!state || state.loading} error={error || state?.error} retentionDays={state?.retentionDays ?? 7}
-      onSelect={id => {
-        if (id) { selectedTasks.set(agentId, id); props.tab.setState({ taskId: id }); }
-        else { selectedTasks.delete(agentId); props.tab.setState({}); }
-        publish(agentId);
-      }}
+      stopping={stopping} loading={!state || state.loading} error={error || state?.error}
       onStop={task => void stop(task)} onRefresh={() => void refresh(agentId)} readLog={readLog}
       logLocation={async taskId => (await client.rpc(taskLogLocation, { agentId, taskId })).path}
       onDelete={async task => {
@@ -102,9 +98,7 @@ export default function contribute(client: PluginClientContext) {
         selectedTasks.delete(agentId); props.tab.setState({}); await refresh(agentId);
       }} />;
   }
-  const removePanel = client.addAgentPanel({ id: "task-logs", title: "后台任务与日志", icon: "Terminal", locations: ["explorer"], Component: TaskPanel });
-  const removeCommand = client.addCommandCenterItem({ id: "task-logs", context: "agent", title: "后台任务与历史日志", icon: "Terminal",
-    onSelect(context) { context.openPanel("task-logs", { location: "explorer" }); } });
+  const removeLog = client.addAgentPanel({ id: "task-logs", title: "任务日志", icon: "Terminal", locations: ["explorer"], Component: TaskLog });
 
   function reconcile() {
     if (disposed) return;
@@ -116,7 +110,7 @@ export default function contribute(client: PluginClientContext) {
     }
     for (const agent of agents.values()) {
       if (!agent.workspaceId || !["codex", "pi"].includes(agent.provider) || agent.archivedAt || states.has(agent.id)) continue;
-      states.set(agent.id, { tasks: [], managedTasks: [], retentionDays: 7, error: null, supported: true, loading: true });
+      states.set(agent.id, { tasks: [], managedTasks: [], error: null, supported: true, loading: true });
       void refresh(agent.id);
     }
   }
@@ -134,5 +128,5 @@ export default function contribute(client: PluginClientContext) {
     return () => { unsubscribe(); void result.subscription.release(); };
   }).catch((error) => console.error("Background task subscription failed", error));
   const timer = setInterval(() => { for (const id of states.keys()) void refresh(id); }, 2000);
-  return async () => { disposed = true; clearInterval(timer); removePanel(); removeCommand(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
+  return async () => { disposed = true; clearInterval(timer); removeLog(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
 }
