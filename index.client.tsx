@@ -87,9 +87,14 @@ export default function contribute(client: PluginClientContext) {
     const state = states.get(agentId);
     const savedId = props.tab.state && typeof props.tab.state === "object" && "taskId" in props.tab.state && typeof props.tab.state.taskId === "string" ? props.tab.state.taskId : null;
     return <ManagedTaskPanel agentId={agentId} tasks={state?.managedTasks ?? []} theme={props.theme}
+      compact={props.layout.compact}
       selectedId={selectedTasks.get(agentId) ?? savedId} stopping={stopping}
       loading={!state || state.loading} error={error || state?.error} retentionDays={state?.retentionDays ?? 7}
-      onSelect={id => { selectedTasks.set(agentId, id); props.tab.setState({ taskId: id }); publish(agentId); }}
+      onSelect={id => {
+        if (id) { selectedTasks.set(agentId, id); props.tab.setState({ taskId: id }); }
+        else { selectedTasks.delete(agentId); props.tab.setState({}); }
+        publish(agentId);
+      }}
       onStop={task => void stop(task)} onRefresh={() => void refresh(agentId)} readLog={readLog}
       logLocation={async taskId => (await client.rpc(taskLogLocation, { agentId, taskId })).path}
       onDelete={async task => {

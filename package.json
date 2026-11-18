@@ -1,7 +1,7 @@
 {
   "name": "background-tasks",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "files": [
     "paseo-plugin.json",
@@ -17,14 +17,18 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:ui": "node tests/ui-smoke.mjs"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.15.4",
     "@types/node": "^22.20.5",
     "@types/react": "~19.2.0",
+    "esbuild": "^0.28.2",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-web": "0.21.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "zod": "^4.4.3"

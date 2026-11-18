@@ -3,6 +3,9 @@ import type { LogPage } from "../shared/managed";
 export const LOG_WINDOW_BYTES = 2 * 1024 * 1024;
 export type LogWindow = { pages: LogPage[]; start: number; end: number; totalBytes: number; task: LogPage["task"] };
 export function mergeLogPage(current: LogWindow | null, page: LogPage, direction: "replace" | "before" | "after"): LogWindow {
+  if (current && direction === "after" && page.end === page.start) {
+    return { ...current, totalBytes: page.totalBytes, task: page.task };
+  }
   let pages = !current || direction === "replace" ? [page]
     : direction === "before" ? [page, ...current.pages] : [...current.pages, page];
   // Empty polling responses update status without accumulating React nodes or cached chunks.

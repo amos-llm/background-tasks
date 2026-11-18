@@ -241,4 +241,5 @@ test("display formatting and bounded windows preserve saved log data", () => {
   assert.equal(next.start, LOG_WINDOW_BYTES);
   const polled = mergeLogPage(next, { ...second, text: "", start: second.end, end: second.end }, "after");
   assert.equal(polled.pages.length, 1);
+  assert.equal(polled.pages, next.pages, "status-only polls should not rebuild a multi-megabyte log display");
 });

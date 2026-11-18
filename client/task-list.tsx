@@ -129,7 +129,7 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Icon name="CircleAlert" size={14} color={colors.statusDanger} />
       <Text selectable style={[styles.errorText, { color: colors.statusDanger }]}>{error}</Text>
     </View>}
-    <Action label="全部受管任务 / 历史日志" theme={theme} onPress={() => onOpenLogs()} />
+    <Action label="全部任务与历史日志" theme={theme} compact={compact} onPress={() => onOpenLogs()} />
     {loading ? <View style={styles.message}>
       <ActivityIndicator size="small" color={colors.foregroundMuted} />
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>正在获取任务…</Text>
@@ -142,7 +142,7 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Text style={[styles.messageTitle, { color: colors.foreground }]}>没有后台任务</Text>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>当前会话没有正在运行的命令</Text>
     </View> : <View style={styles.list}>
-      {managed.map(task => <ManagedRow key={task.id} task={task} theme={theme}
+      {managed.map(task => <ManagedRow key={task.id} task={task} theme={theme} compact={compact}
         stopping={stopping === task.id} onSelect={() => onOpenLogs(task.id)} onStop={() => onStopManaged(task)} />)}
       {state.tasks.map((task) => <TaskRow key={task.token} task={task} theme={theme} compact={compact}
         stopping={stopping === task.token} disabled={stopping !== null || !!state.error}
