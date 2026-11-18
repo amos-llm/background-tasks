@@ -5,8 +5,12 @@ import { listTasks, stopTask, type Task } from "./shared/tasks";
 import { TaskPopover, type TaskListState } from "./client/task-list";
 import { deleteManagedTask, isActiveTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
 import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
+import { CompletionNotice, completionNoticeSchema } from "./client/completion-notice";
+import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
 
 export default function contribute(client: PluginClientContext) {
+  const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: CompletionNotice });
+  const removeNoticeTransformer = client.addTimelineTransformer({ id: "background-task-completion", query: { itemType: "user_message" }, transform: ({ item }) => transformCompletionNotice(item) });
   let disposed = false;
   const states = new Map<string, TaskListState>();
   const pills = new Map<string, PluginButtonRegistration>();
@@ -128,5 +132,5 @@ export default function contribute(client: PluginClientContext) {
     return () => { unsubscribe(); void result.subscription.release(); };
   }).catch((error) => console.error("Background task subscription failed", error));
   const timer = setInterval(() => { for (const id of states.keys()) void refresh(id); }, 2000);
-  return async () => { disposed = true; clearInterval(timer); removeLog(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
+  return async () => { disposed = true; clearInterval(timer); removeLog(); removeNoticeTransformer(); removeNoticeRenderer(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
 }

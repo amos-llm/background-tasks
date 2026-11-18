@@ -24,6 +24,8 @@ window.uiTest = { requests: [], opens: [], commands: [], deleted: 0, copied: nul
 // Run the real client contribution. Only the Paseo host and RPC boundary are
 // simulated, so list clicks, sidebar routing, selection and live refresh are real.
 contribute({
+  addTimelineRenderer(entry) { if (!/^[a-z][a-z0-9-]*$/.test(entry.kind)) throw new Error("Invalid timeline renderer kind"); return () => {}; },
+  addTimelineTransformer() { return () => {}; },
   addAgentPanel(entry) { log = entry; return () => { log = null; update(); }; },
   addCommandCenterItem(entry) { window.uiTest.commands.push(entry.id); return () => {}; },
   addComposerPill(entry) {
