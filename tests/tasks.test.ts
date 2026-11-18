@@ -46,8 +46,10 @@ async function job(agentId: string, ignoreTerm = false): Promise<{ child: ChildP
   const descendantSource = (ignoreTerm ? "process.on('SIGTERM', () => {});" : "") + "console.log('ready'); setInterval(() => {}, 1000);";
   const source = "const { spawn } = require('node:child_process'); const child = spawn(process.execPath, ['-e', " +
     JSON.stringify(descendantSource) + "], { stdio: ['ignore', 'pipe', 'ignore'] }); child.stdout.once('data', () => console.log(child.pid)); setInterval(() => {}, 1000);";
+  // This fixture represents an external shell task, even when the test suite
+  // itself runs through task_start and inherits a managed task marker.
   const child = spawn(process.execPath, ["-e", source], { detached: true, stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, PASEO_AGENT_ID: agentId, CODEX_THREAD_ID: "test-thread", CODEX_TOOL_CALL_ID: randomUUID() } });
+    env: { ...process.env, PASEO_MANAGED_TASK_ID: "", PASEO_AGENT_ID: agentId, CODEX_THREAD_ID: "test-thread", CODEX_TOOL_CALL_ID: randomUUID() } });
   const exited = once(child, "exit");
   const [data] = await once(child.stdout!, "data");
   return { child, descendant: Number(data.toString().trim()), exited };

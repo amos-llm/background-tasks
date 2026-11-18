@@ -12,7 +12,9 @@ paseo plugin install git:amos-llm/background-tasks
 
 ## 使用
 
-新建 Codex / Pi agent 时，插件会在保留原有指令的基础上加入使用指引：后台任务、长时间运行的服务/构建/测试和需要完整日志的命令优先使用 `task_start`；短命令仍可用普通 shell。工具被延迟加载时，指引要求先搜索 Paseo 的 `task_start`。这是模型选工具的指引，不是对所有 shell 命令的强制拦截。
+新建 Codex / Pi agent 时，插件会在保留原有指令的基础上加入明确的执行规则：服务、watcher、构建、测试、类型检查、依赖安装、后台任务、可能耗时或需要完整日志的命令必须使用 `task_start`。即使模型打算等待命令完成，或预计很快结束，也适用；不能改用内置 shell 的前台执行、后台执行或 yield 功能。耗时不确定时也使用 `task_start`。普通 shell 用于文件查看、搜索、Git 查看和编辑等短操作；检查代码与运行构建/测试应拆开调用。工具被延迟加载时，规则要求先搜索 Paseo 的 `task_start`。
+
+这些规则和工具描述仍依赖模型遵守。当前 SDK 没有拦截 Codex / Pi 内置 shell 调用的 hook，插件不能保证模型每次都选择 `task_start`；硬性强制路由需要宿主或 provider 提供执行拦截能力。外部进程扫描也无法事后补回绕过工具的命令日志。
 
 例如直接说“启动 npm run dev，我要看实时完整日志”，也可明确指定“用 task_start 启动 npm run dev”。工具在会话打开时由 Paseo 注入，不需要单独部署 MCP 服务。安装或重载插件后，在会话空闲时发送下一条消息以使工具生效。启动指引仅在创建 agent 时加入并随配置保留，已有 agent 不会自动补写；已有会话可以明确指定工具，或新建 agent 获得指引。
 
