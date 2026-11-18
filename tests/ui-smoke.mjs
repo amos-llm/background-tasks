@@ -106,7 +106,23 @@ try {
     await waitFor("document.body.innerText.includes('第 200 行')");
   }
 
+  await navigate("external-only", 1280, 800);
+  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false, "external processes alone must not create a pill");
+  assert.ok(await evaluate("!window.uiTest.rpcCalls.includes('tasks.list')"), "the client must not scan external processes");
+  console.log("PASS: external processes do not create a background-task pill or trigger scanning");
+
+  await navigate("external-unavailable", 1280, 800);
+  await waitFor("document.body.innerText.includes('后台任务 · 2')");
+  await click("后台任务列表");
+  assert.ok(await evaluate("document.body.innerText.includes('当前会话 · 2 个任务') && !document.body.innerText.includes('external-shell-command')"));
+  assert.ok(await evaluate("!window.uiTest.rpcCalls.includes('tasks.list')"), "managed tasks must not depend on external scanning");
+  console.log("PASS: managed tasks remain available when external process scanning is unavailable");
+
   await navigate("running", 390, 844);
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "后台任务 · 2", "only active task_start tasks count toward the pill");
+  await click("后台任务列表");
+  assert.ok(await evaluate("!document.body.innerText.includes('external-shell-command') && !document.body.innerText.includes('外部任务')"));
+  await click("后台任务列表");
   assert.equal(await evaluate("window.uiTest.requests.length"), 0, "logs should not load until a list entry is selected");
   await openTask();
   await waitFor("document.body.innerText.includes('第 200 行')");

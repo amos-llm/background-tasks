@@ -1,6 +1,5 @@
 import type { PluginButtonRegistration, PluginClientContext, PluginButtonContentProps, PluginAgentPanelProps } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
-import { listTasks, stopTask, type Task } from "./shared/tasks";
 
 import { TaskPopover, type TaskListState } from "./client/task-list";
 import { deleteManagedTask, isActiveTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
@@ -24,7 +23,7 @@ export default function contribute(client: PluginClientContext) {
     const state = states.get(agentId);
     const agent = agents.get(agentId);
     const pill = pills.get(agentId);
-    const count = state ? state.tasks.length + state.managedTasks.filter(isActiveTask).length : 0;
+    const count = state ? state.managedTasks.filter(isActiveTask).length : 0;
     if (state && agent?.workspaceId && count > 0) {
       const label = state.error ? "后台任务 · !" : `后台任务 · ${count}`;
       if (pill) pill.update({ label });
@@ -38,8 +37,8 @@ export default function contribute(client: PluginClientContext) {
     if (existing) return existing;
     const request = (async () => {
       try {
-        const [result, managed] = await Promise.all([client.rpc(listTasks, { agentId }), client.rpc(listManagedTasks, { agentId })]);
-        if (!disposed && states.has(agentId)) states.set(agentId, { ...result, managedTasks: managed.tasks, error: null, loading: false });
+        const managed = await client.rpc(listManagedTasks, { agentId });
+        if (!disposed && states.has(agentId)) states.set(agentId, { managedTasks: managed.tasks, supported: managed.supported, error: null, loading: false });
       } catch (error) {
         if (!disposed && states.has(agentId)) states.set(agentId, { ...states.get(agentId)!, loading: false, error: String(error) });
       } finally { pending.delete(agentId); if (!disposed) publish(agentId); }
@@ -58,12 +57,11 @@ export default function contribute(client: PluginClientContext) {
       listeners.add(update); void refresh(agentId);
       return () => { listeners.delete(update); };
     }, [agentId]);
-    async function stop(task: Task | ManagedTask) {
+    async function stop(task: ManagedTask) {
       if (!agentId) return;
-      setStopping("id" in task ? task.id : task.token); setError(null);
+      setStopping(task.id); setError(null);
       try {
-        if ("id" in task) await client.rpc(stopManagedTask, { agentId, taskId: task.id });
-        else await client.rpc(stopTask, { agentId, token: task.token });
+        await client.rpc(stopManagedTask, { agentId, taskId: task.id });
         await refresh(agentId);
       } catch (err) { setError(String(err)); }
       finally { setStopping(null); }
@@ -77,7 +75,7 @@ export default function contribute(client: PluginClientContext) {
     if (!agentId) return null;
     const state = states.get(agentId);
     return <TaskPopover state={state} theme={props.theme} compact={props.layout.compact}
-      stopping={stopping} actionError={error} onRefresh={() => refresh(agentId)} onStop={(task) => void stop(task)}
+      stopping={stopping} actionError={error} onRefresh={() => refresh(agentId)}
       onStopManaged={task => void stop(task)} onOpenLogs={taskId => {
         selectedTasks.set(agentId, taskId);
         publish(agentId); props.close();
@@ -114,7 +112,7 @@ export default function contribute(client: PluginClientContext) {
     }
     for (const agent of agents.values()) {
       if (!agent.workspaceId || !["codex", "pi"].includes(agent.provider) || agent.archivedAt || states.has(agent.id)) continue;
-      states.set(agent.id, { tasks: [], managedTasks: [], error: null, supported: true, loading: true });
+      states.set(agent.id, { managedTasks: [], error: null, supported: true, loading: true });
       void refresh(agent.id);
     }
   }

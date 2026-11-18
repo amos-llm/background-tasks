@@ -12,11 +12,11 @@ const task = {
   logBytes: 40000, logTruncated: false, error: null,
 };
 const second = { ...task, id: "e24c2613-f14b-463b-9def-880fc8d37204", command: "npm run dev -- --port 3000", label: "开发服务", instruction: "检查服务退出原因。" };
-const tasks = [task, second, { ...task, id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
+const tasks = mode === "external-only" ? [] : [task, second, { ...task, id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
 const agent = { id: "test", workspaceId: "workspace", provider: "pi" };
 let update = () => {}, pill = null, log = null, popoverOpen = false, sidebarOpen = mode === "restore";
 const tab = { state: mode === "restore" ? { taskId: second.id } : {}, setState(state) { this.state = state; } };
-window.uiTest = { requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, command: task.command,
+window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, command: task.command,
   finish() { for (const item of tasks) { item.state = "completed"; item.endedAt = Date.now(); item.exitCode = 0; } },
   savedTask() { return tab.state.taskId; },
 };
@@ -35,8 +35,12 @@ contribute({
   openPanel(id, options) { window.uiTest.opens.push({ id, ...options }); sidebarOpen = true; update(); },
   paseo: { agents: { async list() { return { entries: [{ agent }], subscription: { subscribe: () => () => {}, release: async () => {} } }; } } },
   async rpc(contract, input) {
+    window.uiTest.rpcCalls.push(contract.name);
     switch (contract.name) {
-      case "tasks.list": return { tasks: [], supported: true };
+      case "tasks.list": {
+        if (mode === "external-unavailable") throw new Error("External process scan unavailable");
+        return { tasks: [{ token: "external", pid: 101, command: "external-shell-command", cwd: "/tmp", elapsedSeconds: 5 }], supported: true };
+      }
       case "managed.list": return { tasks: tasks.map(item => ({ ...item })), supported: true, retentionDays: 7 };
       case "managed.logs": {
         window.uiTest.requests.push({ ...input });
