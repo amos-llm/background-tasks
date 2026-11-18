@@ -204,14 +204,31 @@ test("live UTF-8 fragments wait for complete characters and terminal fragments d
 
 test("the same attached tool definitions execute for Pi and Codex and isolate callers", async t => {
   const { store, owner, owners } = await fixture(t);
-  let hook: any;
+  const hooks = new Map<string, any>();
   const unregister = registerTaskTools({ addHook(name: string, handler: any) {
-    assert.equal(name, "agent.open.before"); hook = handler; return () => {};
+    hooks.set(name, handler); return () => { hooks.delete(name); };
   } } as unknown as PluginServerContext, store);
+  const hook = hooks.get("agent.open.before");
+  const create = hooks.get("agent.create.before");
   for (const provider of ["pi", "codex"]) {
     const agent = { ...owner, id: randomUUID(), provider, title: null, workspaceId: null, parentAgentId: null };
     owners.push(agent);
     const request = { provider, purpose: "interactive", tools: [] };
+    const existingConfig = { provider, cwd: owner.cwd, systemPrompt: "Keep this existing instruction.", model: "test-model" };
+    const creation = { config: existingConfig, env: { TEST_ENV: "preserved" } };
+    const guided = await create({ request: creation });
+    assert.equal(creation.config, existingConfig);
+    assert.equal(existingConfig.systemPrompt, "Keep this existing instruction.");
+    assert.equal(guided.env, creation.env);
+    assert.equal(guided.config.model, "test-model");
+    assert.ok(guided.config.systemPrompt.startsWith(`${existingConfig.systemPrompt}\n\n`));
+    for (const text of ["task_start", "discovery/search", "mcp__paseo__task_start", "task_logs", "task_stop", "task_list", "Short commands", "sandbox", "exit code"]) {
+      assert.ok(guided.config.systemPrompt.includes(text), text);
+    }
+    // The daemon persists config.systemPrompt for resume and may pass it to children.
+    assert.equal(await create({ request: guided }), undefined);
+    const fresh = await create({ request: { config: { provider, cwd: owner.cwd } } });
+    assert.ok(fresh.config.systemPrompt.startsWith("[Paseo background-tasks]"));
     const attached = await hook({ request });
     assert.equal(attached.tools.length, 5);
     const tools = new Map<string, AgentToolDefinition>(attached.tools.map((tool: AgentToolDefinition) => [tool.name, tool]));
@@ -227,7 +244,10 @@ test("the same attached tool definitions execute for Pi and Codex and isolate ca
   }
   assert.equal(await hook({ request: { provider: "claude", purpose: "interactive", tools: [] } }), undefined);
   assert.equal(await hook({ request: { provider: "pi", purpose: "history", tools: [] } }), undefined);
+  assert.equal(await create({ request: { config: { provider: "claude" } } }), undefined);
+  assert.equal(await create({ request: { config: { provider: "pi", internal: true } } }), undefined);
   unregister();
+  assert.equal(hooks.size, 0);
 });
 
 test("display formatting and bounded windows preserve saved log data", () => {
