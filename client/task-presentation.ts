@@ -26,7 +26,7 @@ export function taskPillPresentation(tasks: readonly Pick<ManagedTask, "state">[
   return {
     label: `运行${counts.starting + counts.running} · 完成${counts.completed}`,
     summary: parts.slice(1).join(" · "),
-    icon: failed || counts.unknown || stale ? "CircleAlert" as const : "Terminal" as const,
+    icon: "Terminal" as const,
   };
 }
 export function taskTitle(task: Pick<ManagedTask, "label" | "command">) {
