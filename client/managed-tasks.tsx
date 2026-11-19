@@ -44,9 +44,9 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
 export type ReadLog = (input: { agentId: string; taskId: string; before?: number; after?: number; limit?: number }) => Promise<LogPage>;
 type Direction = "replace" | "before" | "after";
 
-function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stopping, onStop }: {
+function LogViewer({ agentId, task, theme, readLog, compact, stopping, onStop }: {
   agentId: string; task: ManagedTask; theme: PluginTheme; readLog: ReadLog; compact: boolean;
-  logLocation(taskId: string): Promise<string>; stopping: boolean;
+  stopping: boolean;
   onStop(): void;
 }) {
   const [window, setWindow] = useState<LogWindow | null>(null);
@@ -128,10 +128,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
     try { await copyText(text); setNotice("已复制当前加载的日志"); }
     catch (err) { setNotice(String(err)); }
   }
-  async function copyLocation() {
-    try { await copyText(await logLocation(task.id)); setNotice("已复制主机上的原始日志路径"); }
-    catch (err) { setNotice(String(err)); }
-  }
   return <View style={styles.viewer}>
     <View style={styles.summary}>
       <View style={styles.summaryTitle}>
@@ -150,7 +146,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         工作目录：{currentTask.cwd}{"\n"}PID：{currentTask.pid ?? "—"} · 日志：{(totalBytes / 1024).toFixed(1)} KiB
         {"\n"}已加载字节：{window?.start ?? 0}–{window?.end ?? 0} · 显示窗口最多 2 MiB
       </Text>
-      <Action label="复制原始日志路径" compact={compact} theme={theme} onPress={() => void copyLocation()} />
     </ScrollView>
     <View style={styles.logToolbar}>
       <Text style={[styles.meta, { color: colors.foregroundMuted }]}>日志</Text>
@@ -202,11 +197,11 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
 }
 
 export function TaskLogSidebar({ agentId, task, theme, error, loading, stopping, compact = false,
-  onStop, onRefresh, readLog, logLocation }: {
+  onStop, onRefresh, readLog }: {
   agentId: string; task?: ManagedTask; theme: PluginTheme; error?: string | null;
   loading: boolean; stopping: string | null; compact?: boolean;
   onStop(task: ManagedTask): void;
-  onRefresh(): void; readLog: ReadLog; logLocation(taskId: string): Promise<string>;
+  onRefresh(): void; readLog: ReadLog;
 }) {
   const [width, setWidth] = useState(0);
   const narrow = compact || width < 720;
@@ -216,7 +211,7 @@ export function TaskLogSidebar({ agentId, task, theme, error, loading, stopping,
       <Action label="重试" compact={narrow} theme={theme} onPress={onRefresh} disabled={loading} />
     </View>}
     {task ? <LogViewer key={`${agentId}:${task.id}`} agentId={agentId} task={task} theme={theme} compact={narrow}
-      stopping={stopping === task.id} onStop={() => onStop(task)} readLog={readLog} logLocation={logLocation} />
+      stopping={stopping === task.id} onStop={() => onStop(task)} readLog={readLog} />
       : <View style={styles.empty}>
         {loading ? <ActivityIndicator color={theme.colors.foregroundMuted} /> : <Icon name="Terminal" color={theme.colors.foregroundMuted} size={24} />}
         <Text style={{ color: theme.colors.foregroundMuted }}>{loading ? "正在加载任务…" : "从后台任务列表选择任务查看日志"}</Text>

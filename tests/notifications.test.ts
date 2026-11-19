@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test, { type TestContext } from "node:test";
 import type { AgentToolDefinition, PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
@@ -75,7 +75,7 @@ test("busy agents queue results; idle delivery sends short notices with results 
   assert.equal(f.sent[0].options.activeTurnBehavior, "steer");
   assert.equal((await f.store.get(f.owner.id, first.id)).notificationStatus, "delivered");
   assert.equal((await f.store.get(f.owner.id, disabled.id)).notificationStatus, "disabled");
-  const receipt = join(dirname(await f.store.logLocation(f.owner.id, first.id)), "notification.json");
+  const receipt = join(f.root, createHash("sha256").update(f.owner.id).digest("hex"), first.id, "notification.json");
   assert.equal((await stat(receipt)).mode & 0o777, 0o600);
   await f.notifier.dispose();
   const reloaded = new TaskCompletionNotifier(new ManagedTaskStore({ root: f.root }));
@@ -174,7 +174,7 @@ test("legacy records are not replayed and cancelled turns suppress future comple
   const f = await fixture(t);
   const legacy = await f.store.start(f.owner, { command: "true" });
   await finished(f.store, f.owner.id, legacy.id);
-  const recordPath = join(dirname(await f.store.logLocation(f.owner.id, legacy.id)), "task.json");
+  const recordPath = join(f.root, createHash("sha256").update(f.owner.id).digest("hex"), legacy.id, "task.json");
   const record = JSON.parse(await readFile(recordPath, "utf8")); delete record.notifyOnExit;
   await writeFile(recordPath, JSON.stringify(record));
   f.current.status = "idle"; await f.notifier.flush(); assert.equal(f.sent.length, 0);

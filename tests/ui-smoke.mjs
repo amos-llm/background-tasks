@@ -309,11 +309,9 @@ try {
   await screenshot("mobile-search");
   await click("收起日志搜索");
   await waitFor("document.body.innerText.includes('第 198 行')");
-  await click("复制原始日志路径");
-  assert.equal(await evaluate("window.uiTest.copied"), "/test/output.log");
-  assert.ok(await evaluate("![...document.querySelectorAll('[role=button]')].some(el => ['更多', '增大日志字号', '减小日志字号'].includes(el.getAttribute('aria-label')))"));
+  assert.ok(await evaluate("![...document.querySelectorAll('[role=button]')].some(el => ['更多', '增大日志字号', '减小日志字号', '复制原始日志路径'].includes(el.getAttribute('aria-label')))"));
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
-  console.log("PASS: 320px pause, copy, loaded-log search and direct log path copying without a more menu");
+  console.log("PASS: 320px pause, copy and loaded-log search without a log path action or more menu");
   console.log("UI screenshots:", artifacts);
 } finally {
   socket?.close();

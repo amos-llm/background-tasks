@@ -2,7 +2,7 @@ import type { PluginButtonRegistration, PluginClientContext, PluginButtonContent
 import { useEffect, useState } from "react";
 
 import { TaskPopover, type TaskListState } from "./client/task-list";
-import { listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
+import { listManagedTasks, readTaskLog, stopManagedTask, type ManagedTask } from "./shared/managed";
 import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
 import { CompletionNotice, completionNoticeSchema } from "./client/completion-notice";
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
@@ -120,8 +120,7 @@ export default function contribute(client: PluginClientContext) {
     return <TaskLogSidebar agentId={agentId} task={state?.managedTasks.find(task => task.id === taskId)} theme={props.theme}
       compact={props.layout.compact}
       stopping={stopping} loading={!state || state.loading} error={error || state?.error}
-      onStop={task => void stop(task)} onRefresh={() => void refresh(agentId)} readLog={readLog}
-      logLocation={async taskId => (await client.rpc(taskLogLocation, { agentId, taskId })).path} />;
+      onStop={task => void stop(task)} onRefresh={() => void refresh(agentId)} readLog={readLog} />;
   }
   const removeLog = client.addAgentPanel({ id: "task-logs", title: "任务日志", icon: "Terminal", locations: ["explorer"], Component: TaskLog });
 

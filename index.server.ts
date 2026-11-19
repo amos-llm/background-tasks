@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { listTasks, stopTask } from "./shared/tasks";
 import { readProcess, selectTasks, snapshot } from "./server/processes";
-import { listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation } from "./shared/managed";
+import { listManagedTasks, readTaskLog, stopManagedTask } from "./shared/managed";
 import { ManagedTaskStore } from "./server/managed";
 import { registerTaskTools } from "./server/tools";
 import { TaskCompletionNotifier } from "./server/notifications";
@@ -32,10 +32,6 @@ export default function contribute(server: PluginServerContext) {
   server.handle(stopManagedTask, async ({ agentId, taskId }, { paseo }) => {
     await checkAgent(agentId, paseo);
     return { stopped: await managed.stop(agentId, taskId) };
-  });
-  server.handle(taskLogLocation, async ({ agentId, taskId }, { paseo }) => {
-    await checkAgent(agentId, paseo);
-    return { path: await managed.logLocation(agentId, taskId) };
   });
   const tokens = new Map<string, { agentId: string; pid: number; start: string; toolId: string; seen: number }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();

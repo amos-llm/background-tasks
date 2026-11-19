@@ -39,10 +39,6 @@ export const stopManagedTask = defineRpc({
   name: "managed.stop", input: z.object({ ...owner, taskId: taskIdSchema }),
   output: z.object({ stopped: z.boolean() }),
 });
-export const taskLogLocation = defineRpc({
-  name: "managed.log-location", input: z.object({ ...owner, taskId: taskIdSchema }),
-  output: z.object({ path: z.string() }),
-});
 export const taskStartInput = z.object({
   command: z.string().trim().min(1).max(65536).describe("Original foreground command with full stdout/stderr. No output-limiting pipes such as npm test | tail or npm run dev | grep: common filters are rejected before execution. Retry without the filter; use task_logs tailLines/filter/before to limit only the agent's view. Do not bypass with another shell tool."),
   cwd: z.string().min(1).optional().describe("Working directory; defaults to the calling agent's directory."),

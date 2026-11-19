@@ -55,7 +55,6 @@ contribute({
         return { text, start: 12000, end: 40000, totalBytes: 40000, hasEarlier: true, task: snapshot };
       }
       case "managed.stop": { const item = tasks.find(item => item.id === input.taskId); item.state = "stopped"; item.endedAt = Date.now(); return { stopped: true }; }
-      case "managed.log-location": return { path: "/test/output.log" };
       default: throw new Error(`Unexpected RPC: ${contract.name}`);
     }
   },

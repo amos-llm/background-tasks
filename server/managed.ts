@@ -256,10 +256,6 @@ export class ManagedTaskStore {
     }
     return true;
   }
-  async logLocation(agentId: string, id: string) {
-    await this.record(agentId, id);
-    return join(this.directory(agentId, id), "output.log");
-  }
   async readLog(agentId: string, id: string, options: { before?: number; after?: number; limit?: number } = {}): Promise<LogPage> {
     const record = await this.record(agentId, id);
     const task = await this.view(record);
