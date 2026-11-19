@@ -26,7 +26,6 @@ export function taskPillPresentation(tasks: readonly Pick<ManagedTask, "state">[
   return {
     label: `后台任务 ${counts.starting + counts.running}/${tasks.length}`,
     summary: parts.slice(1).join(" · "),
-    icon: "Terminal" as const,
   };
 }
 export function taskTitle(task: Pick<ManagedTask, "label" | "command">) {

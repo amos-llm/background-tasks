@@ -8,6 +8,9 @@ import { CompletionNotice, completionNoticeSchema } from "./client/completion-no
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
 import { taskPillPresentation } from "./client/task-presentation";
 
+// The SDK requires an icon field; render no element for a text-only pill.
+function NoPillIcon() { return null; }
+
 export default function contribute(client: PluginClientContext) {
   const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
   const removeNoticeTransformer = client.addTimelineTransformer({ id: "background-task-completion", query: { itemType: "user_message" }, transform: ({ item }) => transformCompletionNotice(item) });
@@ -25,11 +28,11 @@ export default function contribute(client: PluginClientContext) {
     const agent = agents.get(agentId);
     const pill = pills.get(agentId);
     if (state && agent?.workspaceId && state.managedTasks.length > 0) {
-      const { label, icon } = taskPillPresentation(state.managedTasks, !!state.error);
-      const presentation = { label, icon };
+      const { label } = taskPillPresentation(state.managedTasks, !!state.error);
+      const presentation = { label };
       if (pill) pill.update(presentation);
       else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
-        button: { title: "后台任务", ...presentation, behavior: { kind: "popover", Content: TaskList } } }));
+        button: { title: "后台任务", icon: NoPillIcon, ...presentation, behavior: { kind: "popover", Content: TaskList } } }));
     } else if (pill) { pill.remove(); pills.delete(agentId); }
     for (const listener of listeners) listener();
   }

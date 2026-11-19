@@ -65,6 +65,7 @@ function App() {
   const compact = innerWidth < 720;
   const host = { theme: { colors }, layout: { compact, platform: "web" }, host: { id: "test", label: "Test" }, workspaceId: agent.workspaceId };
   const List = pill?.behavior.Content, Log = log?.Component, Notice = notice?.Component;
+  const PillIcon = typeof pill?.icon === "function" ? pill.icon : null;
   const noticeItem = transform?.({ item: { type: "user_message", clientMessageId: "background-tasks:test", text: `后台任务已完成：${task.id}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。` }, phase: "complete" })?.items[0];
   return <div style={{ display: "flex", flex: 1, minHeight: 0, position: "relative", width: "100%" }}>
     <main aria-label="对话" style={{ display: compact && sidebarOpen ? "none" : "flex", flexDirection: "column", flex: 1, minWidth: 0, padding: 16 }}>
@@ -75,9 +76,9 @@ function App() {
         style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, maxWidth: 152,
           padding: "6px 8px", border: "1px solid #333b4b", borderRadius: 6, background: "#171c26", color: "#e7e9ef", fontSize: 12 }}
         onClick={() => { popoverOpen = !popoverOpen; update(); }}>
-        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth="2">
+        {PillIcon ? <PillIcon {...host} context="agent" agentId={agent.id} size={14} color={colors.foreground} /> : <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth="2">
           {pill.icon === "CircleAlert" ? <><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 3v1" /></> : <path d="m5 6 6 6-6 6m8 0h6" />}
-        </svg>
+        </svg>}
         <span data-testid="pill-label" style={{ minWidth: 0, maxWidth: 112, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pill.label}</span>
       </button>}
     </main>

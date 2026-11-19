@@ -140,6 +140,7 @@ try {
 
   await navigate("running", 390, 844);
   assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "后台任务 2/3", "the pill shows active tasks over all retained managed tasks");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').querySelector('svg')"), null, "the pill renders only its title and counts");
   assert.ok(await evaluate("(() => { const label = document.querySelector('[data-testid=pill-label]'); return label.scrollWidth <= label.clientWidth; })()"), "both counts must fit inside the bounded pill label");
   await screenshot("pill-compact");
   await click("后台任务列表");
