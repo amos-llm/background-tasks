@@ -132,14 +132,14 @@ try {
   console.log("PASS: external processes do not create a background-task pill or trigger scanning");
 
   await navigate("external-unavailable", 1280, 800);
-  await waitFor("document.body.innerText.includes('2/3')");
+  await waitFor("document.body.innerText.includes('后台任务 2/3')");
   await click("后台任务列表");
   assert.ok(await evaluate("document.body.innerText.includes('运行中 2 · 已完成 1') && !document.body.innerText.includes('external-shell-command')"));
   assert.ok(await evaluate("!window.uiTest.rpcCalls.includes('tasks.list')"), "managed tasks must not depend on external scanning");
   console.log("PASS: managed tasks remain available when external process scanning is unavailable");
 
   await navigate("running", 390, 844);
-  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "2/3", "the pill shows active tasks over all retained managed tasks");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "后台任务 2/3", "the pill shows active tasks over all retained managed tasks");
   assert.ok(await evaluate("(() => { const label = document.querySelector('[data-testid=pill-label]'); return label.scrollWidth <= label.clientWidth; })()"), "both counts must fit inside the bounded pill label");
   await screenshot("pill-compact");
   await click("后台任务列表");
@@ -156,7 +156,7 @@ try {
   await evaluate("(() => { const el = [...document.querySelectorAll('aside *')].find(el => el.scrollHeight > el.clientHeight + 100 && el.innerText.includes('第 200 行')); el.scrollTop = 0; el.dispatchEvent(new Event('scroll', { bubbles: true })); })()"); await waitFor("document.body.innerText.includes('已暂停跟随')"); await delay(600);
   const requestsBefore = await evaluate("window.uiTest.requests.length");
   await evaluate("window.uiTest.finish()");
-  await waitFor("document.body.innerText.includes('已完成') && document.querySelector('[aria-label=\"后台任务列表\"]')?.textContent === '0/3'");
+  await waitFor("document.body.innerText.includes('已完成') && document.querySelector('[aria-label=\"后台任务列表\"]')?.textContent === '后台任务 0/3'");
   assert.equal(await evaluate("window.uiTest.requests.length"), requestsBefore, "completing a task must not remount a paused viewer");
   assert.ok(await evaluate("document.body.innerText.includes('已完成') && !document.body.innerText.includes('运行中 ·') && document.body.innerText.includes('已暂停跟随')"));
   console.log("PASS: mobile row-to-log flow, sizing, and paused completion preserves history without remounting logs");
@@ -192,7 +192,7 @@ try {
   console.log("PASS: restored sidebar reads the previously selected task directly");
 
   await navigate("ended", 1280, 800);
-  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), '0/3');
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), '后台任务 0/3');
   assert.equal(await evaluate("window.uiTest.requests.length"), 0);
   assert.equal(await evaluate("!!document.querySelector('aside')"), false);
   await click("后台任务列表");
@@ -207,7 +207,7 @@ try {
   assert.equal(await evaluate("window.uiTest.opens.length"), 0, "stopping a task must not activate its log row");
   assert.equal(await evaluate("window.uiTest.requests.length"), 0);
   assert.ok(await evaluate("!document.querySelector('[aria-label=\"后台任务列表弹层\"]').innerText.includes('日志演示开始')"));
-  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "1/3");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "后台任务 1/3");
   assert.ok(await evaluate("document.querySelector('[aria-label=\"后台任务列表弹层\"]').innerText.includes('已终止 1')"));
   console.log("PASS: stopped tasks stay distinct from running and successfully completed pill counts");
 
@@ -243,7 +243,7 @@ try {
   console.log("PASS: return-to-bottom request survives an in-flight history load");
   await navigate("failed", 1280, 800);
   await waitFor("document.querySelector('[aria-label=\"任务完成通知\"]')?.innerText.includes('失败 · 退出码 1')");
-  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "0/3");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent"), "后台任务 0/3");
   assert.equal(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').title"), "后台任务");
   await click("后台任务列表");
   assert.ok(await evaluate("document.querySelector('[aria-label=\"后台任务列表弹层\"]').innerText.includes('失败 1')"));

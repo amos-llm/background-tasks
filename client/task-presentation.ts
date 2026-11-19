@@ -24,7 +24,7 @@ export function taskPillPresentation(tasks: readonly Pick<ManagedTask, "state">[
   if (counts.unknown) parts.push(`状态未知 ${counts.unknown}`);
   if (stale) parts.push("更新失败");
   return {
-    label: `${counts.starting + counts.running}/${tasks.length}`,
+    label: `后台任务 ${counts.starting + counts.running}/${tasks.length}`,
     summary: parts.slice(1).join(" · "),
     icon: "Terminal" as const,
   };
