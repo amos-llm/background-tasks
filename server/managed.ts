@@ -183,7 +183,7 @@ export class ManagedTaskStore {
     // Reserve the whole allowance for running tasks so simultaneous jobs cannot exhaust the budget.
     let reserved = this.maxLogBytes;
     for (let index = 0; index < records.length; index++) reserved += isActiveTask(views[index]) ? records[index].maxLogBytes : views[index].logBytes;
-    if (reserved > this.totalLogBytes) throw new Error("后台任务日志配额不足；请清理已结束任务的日志或增加配额");
+    if (reserved > this.totalLogBytes) throw new Error("后台任务日志配额不足；请等待已结束日志过期清理或增加配额");
     const id = randomUUID();
     const dir = this.directory(owner.id, id);
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -257,16 +257,6 @@ export class ManagedTaskStore {
   async logLocation(agentId: string, id: string) {
     await this.record(agentId, id);
     return join(this.directory(agentId, id), "output.log");
-  }
-  async delete(agentId: string, id: string) {
-    const record = await this.record(agentId, id);
-    const current = await this.view(record);
-    if (isActiveTask(current)) throw new Error("只能删除已经结束的任务和日志");
-    if (current.state === "unknown" && record.pid && (await snapshot()).some(p => p.group === record.pid && p.state !== "Z" && p.state !== "X")) {
-      throw new Error("任务仍有存活进程，请先终止任务");
-    }
-    await rm(this.directory(agentId, id), { recursive: true, force: true });
-    return true;
   }
   async readLog(agentId: string, id: string, options: { before?: number; after?: number; limit?: number } = {}): Promise<LogPage> {
     const record = await this.record(agentId, id);

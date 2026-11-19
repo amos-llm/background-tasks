@@ -20,7 +20,7 @@ const agent = { id: "test", workspaceId: "workspace", provider: "pi" };
 let update = () => {}, pill = null, log = null, popoverOpen = false, sidebarOpen = mode === "restore";
 const renderers = new Map(), transformers = new Map();
 const tab = { state: mode === "restore" ? { taskId: second.id } : {}, setState(state) { this.state = state; } };
-window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, title: task.label ?? "后台命令", command: task.command,
+window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, title: task.label ?? "后台命令", command: task.command,
   finish() { for (const item of tasks) { item.state = "completed"; item.endedAt = Date.now(); item.exitCode = 0; } },
   savedTask() { return tab.state.taskId; },
 };
@@ -55,7 +55,6 @@ contribute({
         return { text, start: 12000, end: 40000, totalBytes: 40000, hasEarlier: true, task: snapshot };
       }
       case "managed.stop": { const item = tasks.find(item => item.id === input.taskId); item.state = "stopped"; item.endedAt = Date.now(); return { stopped: true }; }
-      case "managed.delete": window.uiTest.deleted++; tasks.splice(tasks.findIndex(item => item.id === input.taskId), 1); return { deleted: true };
       case "managed.log-location": return { path: "/test/output.log" };
       default: throw new Error(`Unexpected RPC: ${contract.name}`);
     }

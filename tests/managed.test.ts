@@ -84,7 +84,6 @@ test("full output survives tail/filter queries, UTF-8 pages and a new store inst
   await assert.rejects(store.get("other-agent", task.id));
   await assert.rejects(store.readLog("other-agent", task.id));
   await assert.rejects(store.stop("other-agent", task.id));
-  await assert.rejects(store.delete("other-agent", task.id));
   await assert.rejects(store.get(owner.id, "../../etc/passwd"));
   await assert.rejects(store.readLog(owner.id, task.id, { after: -1 }));
 });
@@ -121,10 +120,10 @@ test("group stop kills TERM-resistant descendants even after the shell leader ex
     await delay(20);
   }
   assert.ok(pid > 0);
-  await assert.rejects(store.delete(owner.id, task.id));
   assert.equal(await store.stop(owner.id, task.id), true);
   const done = await finished(store, owner.id, task.id);
   assert.equal(done.state, "stopped");
+  assert.ok((await store.readLog(owner.id, task.id)).text.includes(String(pid)), "stopping preserves the captured output");
   const remaining = await readProcess(pid);
   assert.ok(!remaining || remaining.state === "Z" || remaining.state === "X");
   assert.equal(await store.stop(owner.id, task.id), false);
@@ -143,7 +142,7 @@ test("timeouts, log capacity and launch failures are explicit terminal states", 
   await assert.rejects(store.start(owner, { command: "true", cwd: "/definitely/missing/directory" }));
 });
 
-test("quota reservations prevent simultaneous starts and deletion frees storage", async t => {
+test("quota reservations prevent simultaneous starts and release unused capacity after stopping", async t => {
   const { store, owner } = await fixture(t, { maxLogBytes: 1024, totalLogBytes: 1024 });
   const starts = await Promise.allSettled([
     store.start(owner, { command: "sleep 60" }), store.start(owner, { command: "sleep 60" }),
@@ -151,8 +150,7 @@ test("quota reservations prevent simultaneous starts and deletion frees storage"
   assert.equal(starts.filter(result => result.status === "fulfilled").length, 1);
   const running = starts.find(result => result.status === "fulfilled") as PromiseFulfilledResult<ManagedTask>;
   await store.stop(owner.id, running.value.id); await finished(store, owner.id, running.value.id);
-  await store.delete(owner.id, running.value.id);
-  assert.deepEqual(await store.list(owner.id), []);
+  assert.equal((await store.list(owner.id))[0].state, "stopped", "stopped task records remain available");
   const next = await store.start(owner, { command: "true" });
   assert.equal((await finished(store, owner.id, next.id)).state, "completed");
 });
@@ -176,7 +174,7 @@ test("retention removes only completed tasks, and a killed runner reports unknow
   assert.equal((await fresh.get(owner.id, orphan.id)).state, "unknown");
   assert.equal(await fresh.stop(owner.id, orphan.id), true);
   await delay(100);
-  assert.equal(await fresh.delete(owner.id, orphan.id), true);
+  assert.equal((await fresh.get(owner.id, orphan.id)).id, orphan.id, "recovery stop preserves the task record");
 });
 
 test("live UTF-8 fragments wait for complete characters and terminal fragments do not stall cursors", async t => {

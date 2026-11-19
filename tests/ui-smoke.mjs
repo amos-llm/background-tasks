@@ -244,15 +244,16 @@ try {
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.equal(await evaluate("innerWidth"), 320);
   assert.ok(await evaluate("document.body.innerText.includes('工作目录：')"));
-  await evaluate("window.uiTest.finish()");
-  await waitFor("document.body.innerText.includes('日志已结束')");
-  await click("删除任务和日志"); assert.equal(await evaluate("window.uiTest.deleted"), 0);
-  assert.ok(await evaluate("!!document.querySelector('[role=dialog]')"));
-  await click("取消"); await click("删除任务和日志"); await click("确认永久删除");
-  await waitFor("document.body.innerText.includes('从后台任务列表选择任务查看日志')");
-  assert.equal(await evaluate("window.uiTest.deleted"), 1);
-  assert.ok(await evaluate("window.uiTest.requests.every(request => request.taskId === window.uiTest.taskId)"), "deletion must not automatically open another task");
-  console.log("PASS: 320px row-to-log navigation, details, delete confirmation and no automatic task fallback");
+  assert.ok(await evaluate("!document.querySelector('aside').innerText.includes('删除')"), "running tasks have no delete action");
+  await click("终止");
+  await waitFor("document.querySelector('aside').innerText.includes('已终止') && document.body.innerText.includes('日志已结束')");
+  assert.ok(await evaluate("document.querySelector('aside').innerText.includes('第 200 行') && !document.querySelector('aside').innerText.includes('删除')"), "stopping retains the log without offering deletion");
+  await click("关闭日志");
+  await click("后台任务列表"); await click("最近结束任务");
+  await click(await evaluate("'查看日志 ' + window.uiTest.title"));
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  assert.ok(await evaluate("document.querySelector('aside').innerText.includes('已终止') && !window.uiTest.rpcCalls.includes('managed.delete')"));
+  console.log("PASS: 320px stop preserves task records and logs, which reopen from history without any delete action");
 
   await navigate("running", 320, 700);
   await openTask();

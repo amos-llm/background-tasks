@@ -39,10 +39,6 @@ export const stopManagedTask = defineRpc({
   name: "managed.stop", input: z.object({ ...owner, taskId: taskIdSchema }),
   output: z.object({ stopped: z.boolean() }),
 });
-export const deleteManagedTask = defineRpc({
-  name: "managed.delete", input: z.object({ ...owner, taskId: taskIdSchema }),
-  output: z.object({ deleted: z.boolean() }),
-});
 export const taskLogLocation = defineRpc({
   name: "managed.log-location", input: z.object({ ...owner, taskId: taskIdSchema }),
   output: z.object({ path: z.string() }),

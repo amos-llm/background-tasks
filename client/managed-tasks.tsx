@@ -1,6 +1,6 @@
 import { InteractivePressable } from "./interactive-pressable";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { copyText, Icon, Modal, ScrollView } from "@getpaseo/plugin/client/ui";
+import { copyText, Icon, ScrollView } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Platform, StyleSheet, Text, TextInput, View, type ScrollView as NativeScrollView } from "react-native";
 import { isActiveTask, type LogPage, type ManagedTask } from "../shared/managed";
@@ -44,10 +44,10 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
 export type ReadLog = (input: { agentId: string; taskId: string; before?: number; after?: number; limit?: number }) => Promise<LogPage>;
 type Direction = "replace" | "before" | "after";
 
-function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stopping, onStop, onDelete }: {
+function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stopping, onStop }: {
   agentId: string; task: ManagedTask; theme: PluginTheme; readLog: ReadLog; compact: boolean;
   logLocation(taskId: string): Promise<string>; stopping: boolean;
-  onStop(): void; onDelete(): Promise<void>;
+  onStop(): void;
 }) {
   const [window, setWindow] = useState<LogWindow | null>(null);
   const windowRef = useRef<LogWindow | null>(null);
@@ -61,8 +61,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   const lastScrollY = useRef(0);
   const loadRef = useRef<(direction: Direction) => Promise<void>>(async () => {});
   const [notice, setNotice] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -134,11 +132,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
     try { await copyText(await logLocation(task.id)); setNotice("已复制主机上的原始日志路径"); }
     catch (err) { setNotice(String(err)); }
   }
-  async function remove() {
-    setDeleting(true); setNotice(null);
-    try { await onDelete(); }
-    catch (err) { setNotice(String(err)); setDeleting(false); setConfirmDelete(false); }
-  }
   return <View style={styles.viewer}>
     <View style={styles.summary}>
       <View style={styles.summaryTitle}>
@@ -167,7 +160,6 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         <Action label={searching ? "收起" : "搜索"} accessibilityLabel={searching ? "收起日志搜索" : "搜索日志"}
           compact={compact} theme={theme} onPress={toggleSearch} />
         <Action label="复制" accessibilityLabel="复制已加载日志" disabled={!text} compact={compact} theme={theme} onPress={() => void copy()} />
-        {!isActiveTask(currentTask) && <Action label="删除任务和日志" compact={compact} danger theme={theme} onPress={() => setConfirmDelete(true)} />}
       </View>
     </View>
     <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: hasNewOutput ? colors.accent : colors.foregroundMuted }]}>
@@ -206,21 +198,14 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
       {!following && window && window.end < totalBytes && <Action label="加载较新日志" disabled={busy} compact={compact} theme={theme}
         onPress={() => void loadRef.current("after")} />}
     </ScrollView>
-    <Modal title="删除任务和日志" open={confirmDelete} onOpenChange={open => { if (!deleting) setConfirmDelete(open); }}>
-      <Modal.Content>
-        <Text style={{ color: colors.foreground }}>将永久删除此任务的记录和日志，无法撤销。</Text>
-        <Action label={deleting ? "删除中…" : "确认永久删除"} danger compact theme={theme} disabled={deleting} onPress={() => void remove()} />
-        <Action label="取消" compact theme={theme} disabled={deleting} onPress={() => setConfirmDelete(false)} />
-      </Modal.Content>
-    </Modal>
   </View>;
 }
 
 export function TaskLogSidebar({ agentId, task, theme, error, loading, stopping, compact = false,
-  onStop, onDelete, onRefresh, readLog, logLocation }: {
+  onStop, onRefresh, readLog, logLocation }: {
   agentId: string; task?: ManagedTask; theme: PluginTheme; error?: string | null;
   loading: boolean; stopping: string | null; compact?: boolean;
-  onStop(task: ManagedTask): void; onDelete(task: ManagedTask): Promise<void>;
+  onStop(task: ManagedTask): void;
   onRefresh(): void; readLog: ReadLog; logLocation(taskId: string): Promise<string>;
 }) {
   const [width, setWidth] = useState(0);
@@ -231,7 +216,7 @@ export function TaskLogSidebar({ agentId, task, theme, error, loading, stopping,
       <Action label="重试" compact={narrow} theme={theme} onPress={onRefresh} disabled={loading} />
     </View>}
     {task ? <LogViewer key={`${agentId}:${task.id}`} agentId={agentId} task={task} theme={theme} compact={narrow}
-      stopping={stopping === task.id} onStop={() => onStop(task)} onDelete={() => onDelete(task)} readLog={readLog} logLocation={logLocation} />
+      stopping={stopping === task.id} onStop={() => onStop(task)} readLog={readLog} logLocation={logLocation} />
       : <View style={styles.empty}>
         {loading ? <ActivityIndicator color={theme.colors.foregroundMuted} /> : <Icon name="Terminal" color={theme.colors.foregroundMuted} size={24} />}
         <Text style={{ color: theme.colors.foregroundMuted }}>{loading ? "正在加载任务…" : "从后台任务列表选择任务查看日志"}</Text>
