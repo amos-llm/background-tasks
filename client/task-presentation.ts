@@ -11,7 +11,7 @@ export function taskTone(state: ManagedTask["state"]) {
   if (state === "running" || state === "starting") return "accent";
   return "foregroundMuted";
 }
-export function taskPillLabel(tasks: readonly Pick<ManagedTask, "state">[], stale = false) {
+export function taskPillPresentation(tasks: readonly Pick<ManagedTask, "state">[], stale = false) {
   const counts: Record<ManagedTask["state"], number> = {
     starting: 0, running: 0, completed: 0, failed: 0, stopped: 0,
     timed_out: 0, log_limit: 0, error: 0, unknown: 0,
@@ -23,7 +23,11 @@ export function taskPillLabel(tasks: readonly Pick<ManagedTask, "state">[], stal
   if (counts.stopped) parts.push(`已终止 ${counts.stopped}`);
   if (counts.unknown) parts.push(`状态未知 ${counts.unknown}`);
   if (stale) parts.push("更新失败");
-  return parts.join(" · ");
+  return {
+    label: `运行${counts.starting + counts.running} · 完成${counts.completed}`,
+    summary: parts.slice(1).join(" · "),
+    icon: failed || counts.unknown || stale ? "CircleAlert" as const : "Terminal" as const,
+  };
 }
 export function taskTitle(task: Pick<ManagedTask, "label" | "command">) {
   if (task.label?.trim()) return task.label.trim();

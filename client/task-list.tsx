@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { isActiveTask, type ManagedTask } from "../shared/managed";
 import { ManagedRow } from "./managed-tasks";
+import { taskPillPresentation } from "./task-presentation";
 
 export interface TaskListState {
   error: string | null;
@@ -42,9 +43,12 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
   }
   return <View style={[styles.popover, compact && styles.popoverCompact]}>
     <View style={styles.toolbar}>
-      <Text style={[styles.caption, { color: colors.foregroundMuted }]}>
-        当前会话{!loading && state?.supported ? ` · ${count} 个运行中` : ""}
-      </Text>
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Text style={[styles.caption, { color: colors.foregroundMuted }]}>当前会话</Text>
+        {!loading && state?.supported && <Text style={[styles.caption, { color: colors.foregroundMuted }]}>
+          {taskPillPresentation(state.managedTasks, !!state.error).summary}
+        </Text>}
+      </View>
       <InteractivePressable theme={theme}
         accessibilityRole="button"
         accessibilityLabel="刷新后台任务"

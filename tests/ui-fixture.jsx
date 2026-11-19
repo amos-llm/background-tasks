@@ -71,7 +71,15 @@ function App() {
       <div style={{ flex: 1 }}>对话内容
         {["failed", "missing"].includes(mode) && Notice && noticeItem && <div aria-label="任务完成通知"><Notice {...host} agentId={agent.id} item={{ ...noticeItem, data: notice.schema.parse(noticeItem.data) }} timestamp={new Date()} /></div>}
       </div>
-      {pill && <button role="button" aria-label="后台任务列表" onClick={() => { popoverOpen = !popoverOpen; update(); }}>{pill.label}</button>}
+      {pill && <button role="button" aria-label="后台任务列表" title={pill.title}
+        style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, maxWidth: 152,
+          padding: "6px 8px", border: "1px solid #333b4b", borderRadius: 6, background: "#171c26", color: "#e7e9ef", fontSize: 12 }}
+        onClick={() => { popoverOpen = !popoverOpen; update(); }}>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth="2">
+          {pill.icon === "CircleAlert" ? <><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 3v1" /></> : <path d="m5 6 6 6-6 6m8 0h6" />}
+        </svg>
+        <span data-testid="pill-label" style={{ minWidth: 0, maxWidth: 112, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pill.label}</span>
+      </button>}
     </main>
     {sidebarOpen && Log && <aside aria-label="任务日志侧栏" style={{ width: compact ? "100%" : 400, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, borderLeft: "1px solid #333b4b" }}>
       <header style={{ padding: 8, display: "flex", justifyContent: "space-between" }}><span>{log.title}</span><button role="button" aria-label="关闭日志" onClick={() => { sidebarOpen = false; update(); }}>关闭</button></header>

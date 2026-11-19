@@ -6,7 +6,7 @@ import { deleteManagedTask, listManagedTasks, readTaskLog, stopManagedTask, task
 import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
 import { CompletionNotice, completionNoticeSchema } from "./client/completion-notice";
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
-import { taskPillLabel } from "./client/task-presentation";
+import { taskPillPresentation } from "./client/task-presentation";
 
 export default function contribute(client: PluginClientContext) {
   const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
@@ -25,10 +25,11 @@ export default function contribute(client: PluginClientContext) {
     const agent = agents.get(agentId);
     const pill = pills.get(agentId);
     if (state && agent?.workspaceId && state.managedTasks.length > 0) {
-      const label = taskPillLabel(state.managedTasks, !!state.error);
-      if (pill) pill.update({ label });
+      const { label, icon } = taskPillPresentation(state.managedTasks, !!state.error);
+      const presentation = { label, icon };
+      if (pill) pill.update(presentation);
       else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
-        button: { title: "后台任务", label, icon: "Terminal", behavior: { kind: "popover", Content: TaskList } } }));
+        button: { title: "后台任务", ...presentation, behavior: { kind: "popover", Content: TaskList } } }));
     } else if (pill) { pill.remove(); pills.delete(agentId); }
     for (const listener of listeners) listener();
   }
