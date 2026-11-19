@@ -98,15 +98,16 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
   </View>;
 }
 // Paseo 0.15 menu spacing (4/8/12), md radius (6), sm/base typography
-// (12/14). The host owns the popover/sheet, outer padding and scrolling.
+// (12/14). Keep an inner gutter in addition to the host's popover/sheet padding.
+// Rows must not extend into that gutter on either desktop or mobile.
 const styles = StyleSheet.create({
-  popover: { width: 336, maxWidth: "100%", gap: 4 },
+  popover: { width: 336, maxWidth: "100%", paddingHorizontal: 8, paddingTop: 4, paddingBottom: 8, gap: 8 },
   popoverCompact: { width: "100%" },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28 },
   caption: { fontSize: 12, lineHeight: 18 },
   refresh: { width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 6 },
   refreshCompact: { width: 40, height: 40 },
-  list: { gap: 2, marginHorizontal: -8 },
+  list: { gap: 2 },
   sections: { flexDirection: "row", padding: 3, borderRadius: 6, gap: 3, marginBottom: 4 },
   section: { flex: 1, minHeight: 30, alignItems: "center", justifyContent: "center", borderRadius: 4 },
   sectionCompact: { minHeight: 44 },
