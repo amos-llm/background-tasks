@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { isActiveTask, type ManagedTask } from "../shared/managed";
 import { ManagedRow } from "./managed-tasks";
@@ -10,6 +10,7 @@ export interface TaskListState {
   supported: boolean;
   loading: boolean;
   managedTasks: ManagedTask[];
+  retentionDays?: number;
 }
 interface TaskPopoverProps {
   state?: TaskListState;
@@ -24,11 +25,16 @@ interface TaskPopoverProps {
 export function TaskPopover({ state, theme, compact, stopping, actionError, onRefresh, onStopManaged, onOpenLogs }: TaskPopoverProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshHovered, setRefreshHovered] = useState(false);
+  const [section, setSection] = useState<"active" | "recent">("active");
   const colors = theme.colors;
   const error = actionError || state?.error;
   const loading = !state || state.loading;
   const busy = refreshing || loading;
   const managed = state?.managedTasks.filter(isActiveTask) ?? [];
+  const recent = state?.managedTasks.filter(task => !isActiveTask(task))
+    .sort((a, b) => (b.endedAt ?? b.createdAt) - (a.endedAt ?? a.createdAt)) ?? [];
+  useEffect(() => { if (managed.length === 0 && recent.length > 0) setSection("recent"); }, [managed.length, recent.length]);
+  const shown = section === "active" ? managed : recent.slice(0, 20);
   const count = managed.length;
   async function refresh() {
     setRefreshing(true);
@@ -37,7 +43,7 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
   return <View style={[styles.popover, compact && styles.popoverCompact]}>
     <View style={styles.toolbar}>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>
-        当前会话{!loading && state?.supported ? " · " + count + " 个任务" : ""}
+        当前会话{!loading && state?.supported ? ` · ${count} 个运行中` : ""}
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -57,6 +63,16 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
           : <Icon name="RefreshCw" size={14} color={colors.foregroundMuted} />}
       </Pressable>
     </View>
+    {!loading && state?.supported && <View style={[styles.sections, { backgroundColor: colors.surface2 }]}>
+      {([{ id: "active", title: "运行中", count }, { id: "recent", title: "最近结束", count: recent.length }] as const).map(item => <Pressable key={item.id}
+        accessibilityRole="button" accessibilityLabel={`${item.title}任务`} accessibilityState={{ selected: section === item.id }}
+        onPress={() => setSection(item.id)} style={[styles.section, compact && styles.sectionCompact,
+          section === item.id && { backgroundColor: colors.surface1 }]}>
+        <Text style={{ fontSize: 12, fontWeight: section === item.id ? "600" : "400", color: section === item.id ? colors.foreground : colors.foregroundMuted }}>
+          {item.title} · {item.count}
+        </Text>
+      </Pressable>)}
+    </View>}
     {error && <View accessibilityRole="alert" style={[styles.error, { borderColor: colors.border }]}>
       <Icon name="CircleAlert" size={14} color={colors.statusDanger} />
       <Text selectable style={[styles.errorText, { color: colors.statusDanger }]}>{error}</Text>
@@ -68,14 +84,17 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Icon name="CircleAlert" size={20} color={colors.foregroundMuted} />
       <Text style={[styles.messageTitle, { color: colors.foreground }]}>暂不支持此主机</Text>
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>需要连接 Linux 主机查看后台任务。</Text>
-    </View> : count === 0 && !error ? <View style={styles.empty}>
+    </View> : shown.length === 0 && !error ? <View style={styles.empty}>
       <Icon name="Terminal" size={20} color={colors.foregroundMuted} />
-      <Text style={[styles.messageTitle, { color: colors.foreground }]}>没有后台任务</Text>
-      <Text style={[styles.caption, { color: colors.foregroundMuted }]}>当前会话没有正在运行的后台任务</Text>
+      <Text style={[styles.messageTitle, { color: colors.foreground }]}>{section === "active" ? "没有运行中的任务" : "暂无任务记录"}</Text>
+      <Text style={[styles.caption, { color: colors.foregroundMuted }]}>{section === "active" ? "已结束任务可在“最近结束”中查看" : "任务结束后，可以在这里重新打开日志"}</Text>
     </View> : <View style={styles.list}>
-      {managed.map(task => <ManagedRow key={task.id} task={task} theme={theme} compact={compact}
+      {shown.map(task => <ManagedRow key={task.id} task={task} theme={theme} compact={compact}
         stopping={stopping === task.id} onSelect={() => onOpenLogs(task.id)} onStop={() => onStopManaged(task)} />)}
     </View>}
+    {section === "recent" && recent.length > 0 && <Text style={[styles.caption, styles.footer, { color: colors.foregroundMuted }]}>
+      {recent.length > 20 ? "显示最近 20 条 · " : ""}日志保留 {state?.retentionDays ?? 7} 天
+    </Text>}
   </View>;
 }
 // Paseo 0.15 menu spacing (4/8/12), md radius (6), sm/base typography
@@ -88,6 +107,10 @@ const styles = StyleSheet.create({
   refresh: { width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 6 },
   refreshCompact: { width: 40, height: 40 },
   list: { gap: 2, marginHorizontal: -8 },
+  sections: { flexDirection: "row", padding: 3, borderRadius: 6, gap: 3, marginBottom: 4 },
+  section: { flex: 1, minHeight: 30, alignItems: "center", justifyContent: "center", borderRadius: 4 },
+  sectionCompact: { minHeight: 44 },
+  footer: { paddingTop: 8 },
   disabled: { opacity: 0.5 },
   message: { minHeight: 88, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" },
   empty: { paddingVertical: 24, alignItems: "center", gap: 8 },

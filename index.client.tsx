@@ -1,4 +1,4 @@
-import type { PluginButtonRegistration, PluginClientContext, PluginButtonContentProps, PluginAgentPanelProps } from "@getpaseo/plugin/client";
+import type { PluginButtonRegistration, PluginClientContext, PluginButtonContentProps, PluginAgentPanelProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 
 import { TaskPopover, type TaskListState } from "./client/task-list";
@@ -8,7 +8,7 @@ import { CompletionNotice, completionNoticeSchema } from "./client/completion-no
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
 
 export default function contribute(client: PluginClientContext) {
-  const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: CompletionNotice });
+  const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
   const removeNoticeTransformer = client.addTimelineTransformer({ id: "background-task-completion", query: { itemType: "user_message" }, transform: ({ item }) => transformCompletionNotice(item) });
   let disposed = false;
   const states = new Map<string, TaskListState>();
@@ -24,8 +24,8 @@ export default function contribute(client: PluginClientContext) {
     const agent = agents.get(agentId);
     const pill = pills.get(agentId);
     const count = state ? state.managedTasks.filter(isActiveTask).length : 0;
-    if (state && agent?.workspaceId && count > 0) {
-      const label = state.error ? "后台任务 · !" : `后台任务 · ${count}`;
+    if (state && agent?.workspaceId && state.managedTasks.length > 0) {
+      const label = state.error ? "后台任务 · !" : count > 0 ? `后台任务 · ${count}` : `任务记录 · ${state.managedTasks.length}`;
       if (pill) pill.update({ label });
       else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
         button: { title: "后台任务", label, icon: "Terminal", behavior: { kind: "popover", Content: TaskList } } }));
@@ -38,13 +38,29 @@ export default function contribute(client: PluginClientContext) {
     const request = (async () => {
       try {
         const managed = await client.rpc(listManagedTasks, { agentId });
-        if (!disposed && states.has(agentId)) states.set(agentId, { managedTasks: managed.tasks, supported: managed.supported, error: null, loading: false });
+        if (!disposed && states.has(agentId)) states.set(agentId, { managedTasks: managed.tasks, retentionDays: managed.retentionDays, supported: managed.supported, error: null, loading: false });
       } catch (error) {
         if (!disposed && states.has(agentId)) states.set(agentId, { ...states.get(agentId)!, loading: false, error: String(error) });
       } finally { pending.delete(agentId); if (!disposed) publish(agentId); }
     })();
     pending.set(agentId, request);
     return request;
+  }
+
+  function openLogs(agentId: string, taskId: string) {
+    const agent = agents.get(agentId);
+    if (!agent?.workspaceId) return;
+    selectedTasks.set(agentId, taskId);
+    publish(agentId);
+    client.openPanel("task-logs", { workspaceId: agent.workspaceId, agentId, location: "explorer" });
+  }
+
+  function TaskCompletion(props: PluginTimelineItemProps<{ taskIds: string[] }>) {
+    useActions(props.agentId);
+    const state = states.get(props.agentId);
+    return <CompletionNotice taskIds={props.item.data.taskIds} tasks={state?.managedTasks ?? []}
+      theme={props.theme} compact={props.layout.compact} loading={!state || state.loading} error={state?.error}
+      onOpen={taskId => openLogs(props.agentId, taskId)} onRetry={() => void refresh(props.agentId)} />;
   }
 
   function useActions(agentId: string | null) {
@@ -77,9 +93,7 @@ export default function contribute(client: PluginClientContext) {
     return <TaskPopover state={state} theme={props.theme} compact={props.layout.compact}
       stopping={stopping} actionError={error} onRefresh={() => refresh(agentId)}
       onStopManaged={task => void stop(task)} onOpenLogs={taskId => {
-        selectedTasks.set(agentId, taskId);
-        publish(agentId); props.close();
-        client.openPanel("task-logs", { workspaceId: props.workspaceId, agentId, location: "explorer" });
+        props.close(); openLogs(agentId, taskId);
       }} />;
   }
 

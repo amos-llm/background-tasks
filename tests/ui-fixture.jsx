@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import contribute from "../index.client";
 
 const mode = new URLSearchParams(location.search).get("mode");
-const colors = { foreground: "#e7e9ef", foregroundMuted: "#9098aa", border: "#333b4b", surface1: "#171c26", surface2: "#252d3c", statusDanger: "#ff7b87" };
+const colors = { foreground: "#e7e9ef", foregroundMuted: "#9098aa", border: "#333b4b", surface1: "#171c26", surface2: "#252d3c", accent: "#88b4ff", statusSuccess: "#7bdba3", statusWarning: "#f0c674", statusDanger: "#ff7b87" };
 const task = {
   id: "506e44f1-0f0c-4a8e-a6ac-ed03b8d340be", provider: "pi",
   command: "printf '=== 日志演示开始 ===\\n'; for i in {1..60}; do printf '[%s] INFO 进度 %02d/60\\n' \"$(date '+%H:%M:%S')\" \"$i\"; sleep 1; done; printf '=== 任务完成 ===\\n'",
@@ -12,11 +12,12 @@ const task = {
   logBytes: 40000, logTruncated: false, error: null,
 };
 const second = { ...task, id: "e24c2613-f14b-463b-9def-880fc8d37204", command: "npm run dev -- --port 3000", label: "开发服务", instruction: "检查服务退出原因。" };
-const tasks = mode === "external-only" ? [] : [task, second, { ...task, id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
+if (mode === "failed") { task.state = "failed"; task.endedAt = Date.now(); task.exitCode = 1; task.label = "运行测试"; second.state = "completed"; second.endedAt = Date.now(); second.exitCode = 0; }
+const tasks = mode === "external-only" || mode === "missing" ? [] : [task, second, { ...task, label: "历史任务", id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
 const agent = { id: "test", workspaceId: "workspace", provider: "pi" };
-let update = () => {}, pill = null, log = null, popoverOpen = false, sidebarOpen = mode === "restore";
+let update = () => {}, pill = null, log = null, notice = null, transform = null, popoverOpen = false, sidebarOpen = mode === "restore";
 const tab = { state: mode === "restore" ? { taskId: second.id } : {}, setState(state) { this.state = state; } };
-window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, command: task.command,
+window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, title: task.label ?? "后台命令", command: task.command,
   finish() { for (const item of tasks) { item.state = "completed"; item.endedAt = Date.now(); item.exitCode = 0; } },
   savedTask() { return tab.state.taskId; },
 };
@@ -24,8 +25,8 @@ window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 
 // Run the real client contribution. Only the Paseo host and RPC boundary are
 // simulated, so list clicks, sidebar routing, selection and live refresh are real.
 contribute({
-  addTimelineRenderer(entry) { if (!/^[a-z][a-z0-9-]*$/.test(entry.kind)) throw new Error("Invalid timeline renderer kind"); return () => {}; },
-  addTimelineTransformer() { return () => {}; },
+  addTimelineRenderer(entry) { if (!/^[a-z][a-z0-9-]*$/.test(entry.kind)) throw new Error("Invalid timeline renderer kind"); notice = entry; return () => {}; },
+  addTimelineTransformer(entry) { transform = entry.transform; return () => {}; },
   addAgentPanel(entry) { log = entry; return () => { log = null; update(); }; },
   addCommandCenterItem(entry) { window.uiTest.commands.push(entry.id); return () => {}; },
   addComposerPill(entry) {
@@ -63,10 +64,13 @@ function App() {
   update = () => render(value => value + 1);
   const compact = innerWidth < 720;
   const host = { theme: { colors }, layout: { compact, platform: "web" }, host: { id: "test", label: "Test" }, workspaceId: agent.workspaceId };
-  const List = pill?.behavior.Content, Log = log?.Component;
+  const List = pill?.behavior.Content, Log = log?.Component, Notice = notice?.Component;
+  const noticeItem = transform?.({ item: { type: "user_message", clientMessageId: "background-tasks:test", text: `后台任务已完成：${task.id}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。` }, phase: "complete" })?.items[0];
   return <div style={{ display: "flex", flex: 1, minHeight: 0, position: "relative", width: "100%" }}>
     <main aria-label="对话" style={{ display: compact && sidebarOpen ? "none" : "flex", flexDirection: "column", flex: 1, minWidth: 0, padding: 16 }}>
-      <div style={{ flex: 1 }}>对话内容</div>
+      <div style={{ flex: 1 }}>对话内容
+        {["failed", "missing"].includes(mode) && Notice && noticeItem && <div aria-label="任务完成通知"><Notice {...host} agentId={agent.id} item={{ ...noticeItem, data: notice.schema.parse(noticeItem.data) }} timestamp={new Date()} /></div>}
+      </div>
       {pill && <button role="button" aria-label="后台任务列表" onClick={() => { popoverOpen = !popoverOpen; update(); }}>{pill.label}</button>}
     </main>
     {sidebarOpen && Log && <aside aria-label="任务日志侧栏" style={{ width: compact ? "100%" : 400, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, borderLeft: "1px solid #333b4b" }}>

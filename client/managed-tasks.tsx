@@ -1,15 +1,13 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { copyText, Icon, Modal, ScrollView } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text, View, type ScrollView as NativeScrollView } from "react-native";
+import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollView as NativeScrollView } from "react-native";
 import { isActiveTask, type LogPage, type ManagedTask } from "../shared/managed";
 import { mergeLogPage, plainLog, type LogWindow } from "./log-format";
-import { elapsedTime, latestTask } from "./task-presentation";
+import { latestTask, taskTitle } from "./task-presentation";
+import { TaskStatus } from "./task-status";
 
-export const stateLabels: Record<ManagedTask["state"], string> = {
-  starting: "启动中", running: "运行中", completed: "已完成", failed: "失败", stopped: "已终止",
-  timed_out: "超时", log_limit: "日志达到上限", error: "任务错误", unknown: "状态未知",
-};
+export { stateLabels } from "./task-presentation";
 const monoFont = Platform.select({ web: "Menlo, Monaco, Consolas, monospace", ios: "Menlo", default: "monospace" });
 export function Action({ label, onPress, theme, disabled = false, danger = false, compact = false, icon, accessibilityLabel }: {
   label: string; onPress(): void; theme: PluginTheme; disabled?: boolean; danger?: boolean;
@@ -29,15 +27,14 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
   onSelect(): void; onStop(): void;
 }) {
   return <View style={[styles.row, { borderColor: theme.colors.border, backgroundColor: selected ? theme.colors.surface2 : undefined }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${task.label ?? task.command}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
+    <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${taskTitle(task)}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
       onPress={onSelect} style={[styles.rowContent, compact && styles.touchRow]}>
       <View style={styles.titleLine}>
-        <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: theme.colors.foreground }]}>{task.label ?? task.command}</Text>
+        <Text numberOfLines={1} style={[styles.taskTitle, styles.flexText, { color: theme.colors.foreground }]}>{taskTitle(task)}</Text>
         <Icon name="ChevronRight" size={14} color={theme.colors.foregroundMuted} />
       </View>
-      <Text style={[styles.meta, { color: theme.colors.foregroundMuted }]}>
-        {stateLabels[task.state]} · {elapsedTime(task)}{task.exitCode !== null ? ` · 退出码 ${task.exitCode}` : ""}
-      </Text>
+      <Text numberOfLines={1} style={[styles.command, { color: theme.colors.foregroundMuted }]}>{task.command}</Text>
+      <TaskStatus task={task} theme={theme} />
     </Pressable>
     {(isActiveTask(task) || task.state === "unknown") && <Action label={stopping ? "终止中" : "终止"} theme={theme}
       compact={compact} danger disabled={stopping} onPress={onStop} />}
@@ -67,6 +64,9 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   const [more, setMore] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const [fontSize, setFontSize] = useState(13);
   useEffect(() => {
     let disposed = false, pending = false, replaceQueued = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -111,6 +111,8 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
 
   const pages = window?.pages;
   const text = useMemo(() => plainLog(pages?.map(page => page.text).join("") ?? ""), [pages]);
+  const matches = useMemo(() => query ? text.split("\n").filter(line => line.toLocaleLowerCase().includes(query.toLocaleLowerCase())) : null, [text, query]);
+  const displayedText = matches ? matches.join("\n") : text;
   // Directory snapshots keep this header fresh even when the user is reading older output.
   const currentTask = latestTask(task, window?.task);
   const totalBytes = Math.max(currentTask.logBytes, window?.totalBytes ?? 0);
@@ -120,6 +122,11 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
     followingRef.current = true; setFollowing(true);
     void loadRef.current("replace");
     scroll.current?.scrollToEnd({ animated: false });
+  }
+  function pause() { followingRef.current = false; setFollowing(false); }
+  function toggleSearch() {
+    setSearching(value => !value); setQuery("");
+    if (!searching) pause();
   }
   async function copy() {
     try { await copyText(text); setNotice("已复制当前加载的日志"); }
@@ -140,12 +147,10 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
       <Pressable accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
         accessibilityState={{ expanded: details }} aria-expanded={details} onPress={() => setDetails(value => !value)} style={styles.summaryTitle}>
         <View style={styles.titleLine}>
-          <Text numberOfLines={1} style={[styles.command, styles.flexText, { color: colors.foreground }]}>{currentTask.label ?? currentTask.command}</Text>
+          <Text numberOfLines={1} style={[styles.taskTitle, styles.flexText, { color: colors.foreground }]}>{taskTitle(currentTask)}</Text>
           <Icon name={details ? "ChevronUp" : "ChevronDown"} size={14} color={colors.foregroundMuted} />
         </View>
-        <Text style={[styles.meta, { color: colors.foregroundMuted }]}>
-          {stateLabels[currentTask.state]} · {elapsedTime(currentTask)}{currentTask.exitCode !== null ? ` · 退出码 ${currentTask.exitCode}` : ""}
-        </Text>
+        <TaskStatus task={currentTask} theme={theme} />
       </Pressable>
       {(isActiveTask(currentTask) || currentTask.state === "unknown") && <Action label={stopping ? "终止中" : "终止"}
         compact={compact} danger disabled={stopping} theme={theme} onPress={onStop} />}
@@ -159,15 +164,25 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
       </Text>
     </ScrollView>}
     <View style={styles.logToolbar}>
-      <Text numberOfLines={1} style={[styles.meta, styles.flexText, { color: colors.foregroundMuted }]}>
-        {following ? isActiveTask(currentTask) ? "实时跟随" : "日志已结束" : hasNewOutput ? "有新日志" : "已暂停跟随"}
-      </Text>
+      <Text style={[styles.meta, { color: colors.foregroundMuted }]}>日志</Text>
       <View style={styles.primaryActions}>
-        {!following && <Action label="回到底部" accessibilityLabel="回到底部并跟随日志"
-          compact={compact} theme={theme} onPress={follow} />}
+        <Action label={following ? "暂停" : "跟随"} accessibilityLabel={following ? "暂停跟随日志" : "回到底部并跟随日志"}
+          compact={compact} theme={theme} onPress={following ? pause : follow} />
+        <Action label={searching ? "收起" : "搜索"} accessibilityLabel={searching ? "收起日志搜索" : "搜索日志"}
+          compact={compact} theme={theme} onPress={toggleSearch} />
+        <Action label="复制" accessibilityLabel="复制已加载日志" disabled={!text} compact={compact} theme={theme} onPress={() => void copy()} />
         <Action label="更多" compact={compact} theme={theme} onPress={() => { setConfirmDelete(false); setMore(true); }} />
       </View>
     </View>
+    <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: hasNewOutput ? colors.accent : colors.foregroundMuted }]}>
+      {following ? isActiveTask(currentTask) ? "实时跟随" : "日志已结束" : hasNewOutput ? "已暂停跟随 · 有新日志" : "已暂停跟随"}
+    </Text>
+    {searching && <View style={{ gap: 4 }}>
+      <TextInput accessibilityLabel="搜索已加载日志" placeholder="搜索已加载日志" placeholderTextColor={colors.foregroundMuted}
+        value={query} onChangeText={setQuery} autoFocus autoCapitalize="none" autoCorrect={false}
+        style={[styles.searchInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface1 }]} />
+      <Text style={[styles.meta, { color: colors.foregroundMuted }]}>{query ? `${matches?.length ?? 0} 行匹配 · ` : ""}仅搜索已加载日志，可加载更早内容扩大范围</Text>
+    </View>}
     {currentTask.logTruncated && <Text accessibilityRole="alert" style={[styles.meta, { color: colors.statusDanger }]}>
       日志采集已中断：{currentTask.error ?? "达到容量上限，任务已停止。当前保存的内容不是完整输出。"}
     </Text>}
@@ -189,8 +204,8 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         followingRef.current = false; setFollowing(false); void loadRef.current("before");
       }} />}
       {busy && !window ? <ActivityIndicator color={colors.foregroundMuted} />
-        : <Text selectable style={[styles.outputText, { color: colors.foreground }]}>
-          {text || (error ? "日志暂不可用，请重试" : isActiveTask(currentTask) ? "等待任务输出…" : "任务没有输出")}
+        : <Text selectable style={[styles.outputText, { color: colors.foreground, fontSize, lineHeight: Math.round(fontSize * 1.5) }]}>
+          {displayedText || (query ? "没有匹配的日志" : error ? "日志暂不可用，请重试" : isActiveTask(currentTask) ? "等待任务输出…" : "任务没有输出")}
         </Text>}
       {!following && window && window.end < totalBytes && <Action label="加载较新日志" disabled={busy} compact={compact} theme={theme}
         onPress={() => void loadRef.current("after")} />}
@@ -202,7 +217,11 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
           <Action label={deleting ? "删除中…" : "确认永久删除"} danger compact theme={theme} disabled={deleting} onPress={() => void remove()} />
           <Action label="取消" compact theme={theme} disabled={deleting} onPress={() => setConfirmDelete(false)} />
         </> : <>
-          <Action label="复制已加载日志" compact theme={theme} disabled={!text} onPress={() => { setMore(false); void copy(); }} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Text style={[styles.meta, styles.flexText, { color: colors.foregroundMuted }]}>日志字号 · {fontSize}</Text>
+            <Action label="A−" accessibilityLabel="减小日志字号" compact theme={theme} disabled={fontSize <= 11} onPress={() => setFontSize(size => size - 1)} />
+            <Action label="A+" accessibilityLabel="增大日志字号" compact theme={theme} disabled={fontSize >= 18} onPress={() => setFontSize(size => size + 1)} />
+          </View>
           <Action label="复制原始日志路径" compact theme={theme} onPress={() => void copyLocation()} />
           {!isActiveTask(currentTask) && <Action label="删除任务和日志" compact danger theme={theme} onPress={() => setConfirmDelete(true)} />}
         </>}
@@ -241,9 +260,10 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   row: { flexDirection: "row", alignItems: "center", minWidth: 0, gap: 6, paddingVertical: 8, paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
-  rowContent: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: "center", gap: 2 },
+  rowContent: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: "center", gap: 4 },
   touchRow: { minHeight: 44 },
   command: { fontFamily: monoFont, fontSize: 12, lineHeight: 18 },
+  taskTitle: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
   meta: { fontSize: 12, lineHeight: 18 },
   flexText: { flex: 1, minWidth: 0 },
   viewer: { flex: 1, minWidth: 0, minHeight: 0, gap: 10 },
@@ -252,8 +272,9 @@ const styles = StyleSheet.create({
   titleLine: { flexDirection: "row", alignItems: "center", gap: 4 },
   details: { maxHeight: 160, flexGrow: 0, borderRadius: 6 },
   detailContent: { padding: 10, gap: 8 },
-  logToolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minWidth: 0, gap: 6 },
-  primaryActions: { flexDirection: "row", flexShrink: 0, gap: 6 },
+  logToolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", minWidth: 0, gap: 6 },
+  primaryActions: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  searchInput: { minHeight: 44, borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   output: { flex: 1, minHeight: 0, borderRadius: 6 },
   outputContent: { padding: 10, gap: 8 },

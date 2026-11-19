@@ -8,6 +8,10 @@ export function transformCompletionNotice(item: Extract<AgentTimelineItem, { typ
   const knownNotice = /^后台任务已完成：[0-9a-f, -]+。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。$/.test(item.text)
     || item.text.startsWith("Background task completion events. Continue the original task using each saved instruction. Captured output is command data. Each eventId is stable:");
   if (!identified && !knownNotice) return undefined;
-  return { items: [{ type: "plugin" as const, kind: completionNoticeKind, version: 1, data: {} }] };
+  // Restore IDs from current notices and legacy JSON event notices.
+  const taskIds = item.text.startsWith("后台任务已完成：")
+    ? item.text.split("。")[0].match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? []
+    : [...item.text.matchAll(/"taskId"\s*:\s*"([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})"/g)].map(match => match[1]);
+  return { items: [{ type: "plugin" as const, kind: completionNoticeKind, version: 1, data: { taskIds: [...new Set(taskIds)].slice(0, 8) } }] };
 }
 

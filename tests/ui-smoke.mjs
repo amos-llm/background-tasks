@@ -101,7 +101,7 @@ try {
 
   async function openTask(second = false) {
     await click("后台任务列表");
-    const label = await evaluate(second ? "'查看日志 ' + window.uiTest.secondLabel" : "'查看日志 ' + window.uiTest.command");
+    const label = await evaluate(second ? "'查看日志 ' + window.uiTest.secondLabel" : "'查看日志 ' + window.uiTest.title");
     await click(label);
     await waitFor("document.body.innerText.includes('第 200 行')");
   }
@@ -114,7 +114,7 @@ try {
   await navigate("external-unavailable", 1280, 800);
   await waitFor("document.body.innerText.includes('后台任务 · 2')");
   await click("后台任务列表");
-  assert.ok(await evaluate("document.body.innerText.includes('当前会话 · 2 个任务') && !document.body.innerText.includes('external-shell-command')"));
+  assert.ok(await evaluate("document.body.innerText.includes('当前会话 · 2 个运行中') && !document.body.innerText.includes('external-shell-command')"));
   assert.ok(await evaluate("!window.uiTest.rpcCalls.includes('tasks.list')"), "managed tasks must not depend on external scanning");
   console.log("PASS: managed tasks remain available when external process scanning is unavailable");
 
@@ -134,16 +134,16 @@ try {
   await evaluate("(() => { const el = [...document.querySelectorAll('aside *')].find(el => el.scrollHeight > el.clientHeight + 100 && el.innerText.includes('第 200 行')); el.scrollTop = 0; el.dispatchEvent(new Event('scroll', { bubbles: true })); })()"); await waitFor("document.body.innerText.includes('已暂停跟随')"); await delay(600);
   const requestsBefore = await evaluate("window.uiTest.requests.length");
   await evaluate("window.uiTest.finish()");
-  await waitFor("document.body.innerText.includes('已完成') && !document.querySelector('[aria-label=\"后台任务列表\"]')");
+  await waitFor("document.body.innerText.includes('已完成') && document.querySelector('[aria-label=\"后台任务列表\"]')?.textContent.startsWith('任务记录')");
   assert.equal(await evaluate("window.uiTest.requests.length"), requestsBefore, "completing a task must not remount a paused viewer");
   assert.ok(await evaluate("document.body.innerText.includes('已完成') && !document.body.innerText.includes('运行中 ·') && document.body.innerText.includes('已暂停跟随')"));
-  console.log("PASS: mobile row-to-log flow, sizing, and paused completion removes running entry without remounting logs");
+  console.log("PASS: mobile row-to-log flow, sizing, and paused completion preserves history without remounting logs");
 
   await navigate("running", 1280, 800);
   await click("后台任务列表");
   assert.ok(await evaluate("!document.body.innerText.includes('completed-history-task') && !document.querySelector('[role=tablist]')"));
   assert.equal(await evaluate("window.uiTest.requests.length"), 0);
-  await click(await evaluate("'查看日志 ' + window.uiTest.command"));
+  await click(await evaluate("'查看日志 ' + window.uiTest.title"));
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.deepEqual(await evaluate("window.uiTest.opens[0]"), { id: "task-logs", workspaceId: "workspace", agentId: "test", location: "explorer" });
   assert.equal(await evaluate("window.uiTest.commands.length"), 0, "there should be no standalone task panel command");
@@ -165,10 +165,15 @@ try {
   console.log("PASS: restored sidebar reads the previously selected task directly");
 
   await navigate("ended", 1280, 800);
-  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false);
+  assert.ok(await evaluate("document.querySelector('[aria-label=\"后台任务列表\"]').textContent.startsWith('任务记录')"));
   assert.equal(await evaluate("window.uiTest.requests.length"), 0);
   assert.equal(await evaluate("!!document.querySelector('aside')"), false);
-  console.log("PASS: completed tasks do not create a history entry or open logs");
+  await click("后台任务列表");
+  assert.ok(await evaluate("document.body.innerText.includes('最近结束') && document.body.innerText.includes('日志保留 7 天')"));
+  await screenshot("history");
+  await click("查看日志 后台命令");
+  await waitFor("document.body.innerText.includes('第 200 行')");
+  console.log("PASS: completed tasks can be reopened from history without loading logs in advance");
 
   await navigate("running", 1280, 800);
   await click("后台任务列表"); await click("终止");
@@ -181,7 +186,7 @@ try {
   assert.equal(await evaluate("innerWidth"), 320);
   await click("后台任务列表");
   await screenshot("mobile-list");
-  await click(await evaluate("'查看日志 ' + window.uiTest.command"));
+  await click(await evaluate("'查看日志 ' + window.uiTest.title"));
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.equal(await evaluate("innerWidth"), 320);
   await click("任务详情");
@@ -207,6 +212,48 @@ try {
   assert.equal(requests[historyIndex + 1].after, undefined);
   assert.equal(await evaluate("innerWidth"), 320);
   console.log("PASS: return-to-bottom request survives an in-flight history load");
+  await navigate("failed", 1280, 800);
+  await waitFor("document.querySelector('[aria-label=\"任务完成通知\"]')?.innerText.includes('失败 · 退出码 1')");
+  await screenshot("completion-failed");
+  await click("查看日志 运行测试");
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  assert.equal(await evaluate("window.uiTest.opens[0].agentId"), "test");
+  assert.equal(await evaluate("window.uiTest.requests[0].taskId"), await evaluate("window.uiTest.taskId"));
+  await click("关闭日志");
+  await click("查看日志 运行测试");
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  await evaluate("window.uiTest.finish()");
+  await waitFor("document.querySelector('[aria-label=\"任务完成通知\"]')?.innerText.includes('已完成 · 退出码 0')");
+  assert.ok(await evaluate("!document.querySelector('[aria-label=\"任务完成通知\"]').innerText.includes('失败')"));
+  await screenshot("completion-success");
+  console.log("PASS: failed completion shows the real result and reopens the correct log after closing");
+
+  await navigate("missing", 320, 700);
+  await waitFor("document.body.innerText.includes('记录已删除或超过保留期限')");
+  assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false);
+  assert.equal(await evaluate("window.uiTest.opens.length"), 0);
+  assert.ok(await evaluate("!document.body.innerText.includes('已完成')"));
+  console.log("PASS: expired or deleted results have no success claim or actionable log link");
+
+  await navigate("running", 320, 700);
+  await openTask();
+  await click("暂停跟随日志");
+  await waitFor("document.body.innerText.includes('已暂停跟随')");
+  await click("复制已加载日志");
+  assert.ok(await evaluate("window.uiTest.copied.includes('第 200 行')"));
+  await click("搜索日志");
+  await evaluate(`(() => { const el = document.querySelector('[aria-label="搜索已加载日志"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(el, '第 199 行'); el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await waitFor("document.body.innerText.includes('1 行匹配')");
+  assert.ok(await evaluate("!document.body.innerText.includes('第 198 行') && document.body.innerText.includes('第 199 行')"));
+  await screenshot("mobile-search");
+  await click("收起日志搜索");
+  await waitFor("document.body.innerText.includes('第 198 行')");
+  await click("更多");
+  await click("增大日志字号");
+  assert.ok(await evaluate("document.body.innerText.includes('日志字号 · 14')"));
+  await click("关闭");
+  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+  console.log("PASS: 320px pause, copy, loaded-log search and font adjustment");
   console.log("UI screenshots:", artifacts);
 } finally {
   socket?.close();
