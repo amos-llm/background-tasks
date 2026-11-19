@@ -1,6 +1,7 @@
+import { InteractivePressable } from "./interactive-pressable";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { z } from "zod";
 
 import type { ManagedTask } from "../shared/managed";
@@ -19,7 +20,7 @@ export function CompletionNotice({ taskIds, tasks, theme, loading, error, compac
       const task = tasks.find(task => task.id === id);
       const color = task ? colors[taskTone(task.state)] : colors.foregroundMuted;
       const failed = task && taskTone(task.state) === "statusDanger";
-      return <Pressable key={id} accessibilityRole="button" disabled={!task}
+      return <InteractivePressable theme={theme} key={id} accessibilityRole="button" disabled={!task}
         accessibilityLabel={task ? `查看日志 ${taskTitle(task)}` : "任务结果不可用"}
         onPress={() => onOpen(id)} style={({ pressed }) => ({
           flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10,
@@ -37,11 +38,11 @@ export function CompletionNotice({ taskIds, tasks, theme, loading, error, compac
           </Text>
         </View>
         {task && <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />}
-      </Pressable>;
+      </InteractivePressable>;
     })}
-    {error && <Pressable accessibilityRole="button" accessibilityLabel="重试获取任务结果" onPress={onRetry}
-      style={{ minHeight: compact ? 44 : 32, justifyContent: "center" }}>
+    {error && <InteractivePressable theme={theme} accessibilityRole="button" accessibilityLabel="重试获取任务结果" onPress={onRetry}
+      style={{ minHeight: compact ? 44 : 32, justifyContent: "center", paddingHorizontal: 8, borderRadius: 4 }}>
       <Text style={{ color: colors.accent, fontSize: 12 }}>重试获取任务结果</Text>
-    </Pressable>}
+    </InteractivePressable>}
   </View>;
 }

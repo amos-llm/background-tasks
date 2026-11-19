@@ -1,7 +1,8 @@
+import { InteractivePressable } from "./interactive-pressable";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { copyText, Icon, Modal, ScrollView } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollView as NativeScrollView } from "react-native";
+import { ActivityIndicator, AppState, Platform, StyleSheet, Text, TextInput, View, type ScrollView as NativeScrollView } from "react-native";
 import { isActiveTask, type LogPage, type ManagedTask } from "../shared/managed";
 import { mergeLogPage, plainLog, type LogWindow } from "./log-format";
 import { latestTask, taskTitle } from "./task-presentation";
@@ -14,20 +15,20 @@ export function Action({ label, onPress, theme, disabled = false, danger = false
   compact?: boolean; icon?: string; accessibilityLabel?: string;
 }) {
   const color = danger ? theme.colors.statusDanger : theme.colors.foreground;
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label}
+  return <InteractivePressable theme={theme} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label}
     accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.action, compact && styles.touchAction,
       { borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surface2 : undefined }, disabled && styles.disabled]}>
     {icon && <Icon name={icon} size={14} color={color} />}
     <Text style={{ color, fontSize: 12 }}>{label}</Text>
-  </Pressable>;
+  </InteractivePressable>;
 }
 export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, compact = false }: {
   task: ManagedTask; theme: PluginTheme; selected?: boolean; stopping: boolean; compact?: boolean;
   onSelect(): void; onStop(): void;
 }) {
   return <View style={[styles.row, { borderColor: theme.colors.border, backgroundColor: selected ? theme.colors.surface2 : undefined }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`查看日志 ${taskTitle(task)}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
+    <InteractivePressable theme={theme} accessibilityRole="button" accessibilityLabel={`查看日志 ${taskTitle(task)}`} accessibilityState={{ selected: !!selected }} aria-selected={!!selected}
       onPress={onSelect} style={[styles.rowContent, compact && styles.touchRow]}>
       <View style={styles.titleLine}>
         <Text numberOfLines={1} style={[styles.taskTitle, styles.flexText, { color: theme.colors.foreground }]}>{taskTitle(task)}</Text>
@@ -35,7 +36,7 @@ export function ManagedRow({ task, theme, selected, stopping, onSelect, onStop, 
       </View>
       <Text numberOfLines={1} style={[styles.command, { color: theme.colors.foregroundMuted }]}>{task.command}</Text>
       <TaskStatus task={task} theme={theme} />
-    </Pressable>
+    </InteractivePressable>
     {(isActiveTask(task) || task.state === "unknown") && <Action label={stopping ? "终止中" : "终止"} theme={theme}
       compact={compact} danger disabled={stopping} onPress={onStop} />}
   </View>;
@@ -144,14 +145,14 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   }
   return <View style={styles.viewer}>
     <View style={styles.summary}>
-      <Pressable accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
+      <InteractivePressable theme={theme} accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
         accessibilityState={{ expanded: details }} aria-expanded={details} onPress={() => setDetails(value => !value)} style={styles.summaryTitle}>
         <View style={styles.titleLine}>
           <Text numberOfLines={1} style={[styles.taskTitle, styles.flexText, { color: colors.foreground }]}>{taskTitle(currentTask)}</Text>
           <Icon name={details ? "ChevronUp" : "ChevronDown"} size={14} color={colors.foregroundMuted} />
         </View>
         <TaskStatus task={currentTask} theme={theme} />
-      </Pressable>
+      </InteractivePressable>
       {(isActiveTask(currentTask) || currentTask.state === "unknown") && <Action label={stopping ? "终止中" : "终止"}
         compact={compact} danger disabled={stopping} theme={theme} onPress={onStop} />}
     </View>
@@ -258,9 +259,9 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 4, alignItems: "center", justifyContent: "center" },
   touchAction: { minHeight: 44, minWidth: 44 },
   disabled: { opacity: 0.5 },
-  row: { flexDirection: "row", alignItems: "center", minWidth: 0, gap: 6, paddingVertical: 8, paddingHorizontal: 4,
+  row: { flexDirection: "row", alignItems: "center", minWidth: 0, gap: 6,
     borderBottomWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
-  rowContent: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: "center", gap: 4 },
+  rowContent: { borderRadius: 6, padding: 8, flex: 1, minWidth: 0, minHeight: 40, justifyContent: "center", gap: 4 },
   touchRow: { minHeight: 44 },
   command: { fontFamily: monoFont, fontSize: 12, lineHeight: 18 },
   taskTitle: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
@@ -268,7 +269,7 @@ const styles = StyleSheet.create({
   flexText: { flex: 1, minWidth: 0 },
   viewer: { flex: 1, minWidth: 0, minHeight: 0, gap: 10 },
   summary: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
-  summaryTitle: { flex: 1, minWidth: 0, gap: 2, paddingVertical: 4 },
+  summaryTitle: { borderRadius: 4, flex: 1, minWidth: 0, gap: 2, paddingVertical: 4, paddingHorizontal: 6 },
   titleLine: { flexDirection: "row", alignItems: "center", gap: 4 },
   details: { maxHeight: 160, flexGrow: 0, borderRadius: 6 },
   detailContent: { padding: 10, gap: 8 },

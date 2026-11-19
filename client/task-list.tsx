@@ -1,7 +1,8 @@
+import { InteractivePressable } from "./interactive-pressable";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { isActiveTask, type ManagedTask } from "../shared/managed";
 import { ManagedRow } from "./managed-tasks";
 
@@ -24,7 +25,6 @@ interface TaskPopoverProps {
 }
 export function TaskPopover({ state, theme, compact, stopping, actionError, onRefresh, onStopManaged, onOpenLogs }: TaskPopoverProps) {
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshHovered, setRefreshHovered] = useState(false);
   const [section, setSection] = useState<"active" | "recent">("active");
   const colors = theme.colors;
   const error = actionError || state?.error;
@@ -45,33 +45,31 @@ export function TaskPopover({ state, theme, compact, stopping, actionError, onRe
       <Text style={[styles.caption, { color: colors.foregroundMuted }]}>
         当前会话{!loading && state?.supported ? ` · ${count} 个运行中` : ""}
       </Text>
-      <Pressable
+      <InteractivePressable theme={theme}
         accessibilityRole="button"
         accessibilityLabel="刷新后台任务"
         accessibilityState={{ disabled: busy, busy }}
         disabled={busy}
-        onHoverIn={() => setRefreshHovered(true)}
-        onHoverOut={() => setRefreshHovered(false)}
         onPress={() => void refresh()}
         style={({ pressed }) => [
           styles.refresh, compact && styles.refreshCompact,
-          (pressed || refreshHovered) && { backgroundColor: colors.surface2 },
+          pressed && { backgroundColor: colors.surface2 },
           busy && styles.disabled,
         ]}
       >
         {refreshing ? <ActivityIndicator size="small" color={colors.foregroundMuted} />
           : <Icon name="RefreshCw" size={14} color={colors.foregroundMuted} />}
-      </Pressable>
+      </InteractivePressable>
     </View>
     {!loading && state?.supported && <View style={[styles.sections, { backgroundColor: colors.surface2 }]}>
-      {([{ id: "active", title: "运行中", count }, { id: "recent", title: "最近结束", count: recent.length }] as const).map(item => <Pressable key={item.id}
+      {([{ id: "active", title: "运行中", count }, { id: "recent", title: "最近结束", count: recent.length }] as const).map(item => <InteractivePressable theme={theme} key={item.id}
         accessibilityRole="button" accessibilityLabel={`${item.title}任务`} accessibilityState={{ selected: section === item.id }}
-        onPress={() => setSection(item.id)} style={[styles.section, compact && styles.sectionCompact,
+        hoverColor={colors.surface1} onPress={() => setSection(item.id)} style={[styles.section, compact && styles.sectionCompact,
           section === item.id && { backgroundColor: colors.surface1 }]}>
         <Text style={{ fontSize: 12, fontWeight: section === item.id ? "600" : "400", color: section === item.id ? colors.foreground : colors.foregroundMuted }}>
           {item.title} · {item.count}
         </Text>
-      </Pressable>)}
+      </InteractivePressable>)}
     </View>}
     {error && <View accessibilityRole="alert" style={[styles.error, { borderColor: colors.border }]}>
       <Icon name="CircleAlert" size={14} color={colors.statusDanger} />

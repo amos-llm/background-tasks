@@ -53,6 +53,26 @@ async function screenshot(name) {
   await writeFile(join(artifacts, name + ".png"), Buffer.from(response.data, "base64"));
 }
 
+async function checkFeedback(label, screenshotName, disabled = false) {
+  const selector = `[aria-label=${JSON.stringify(label)}]`;
+  const locate = `document.querySelector(${JSON.stringify(selector)})`;
+  const before = await evaluate(`(() => { const el = ${locate}; const box = el.getBoundingClientRect(); return { background: getComputedStyle(el).backgroundColor, x: box.x + box.width / 2, y: box.y + box.height / 2 }; })()`);
+  await call("Input.dispatchMouseEvent", { type: "mouseMoved", x: before.x, y: before.y });
+  await delay(100);
+  const hovered = await evaluate(`({ background: getComputedStyle(${locate}).backgroundColor, cursor: getComputedStyle(${locate}).cursor })`);
+  assert.equal(hovered.cursor, disabled ? "auto" : "pointer", label + " cursor");
+  if (disabled) assert.equal(hovered.background, before.background, label + " disabled hover");
+  else assert.notEqual(hovered.background, before.background, label + " hover feedback");
+  if (screenshotName) await screenshot(screenshotName);
+  await call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 });
+  await delay(100);
+  assert.equal(await evaluate(`getComputedStyle(${locate}).backgroundColor`), before.background, label + " restores after hover");
+  await evaluate(`${locate}.focus()`);
+  await delay(100);
+  assert.equal(await evaluate(`getComputedStyle(${locate}).outlineWidth`), disabled ? "0px" : "2px", label + " focus feedback");
+  await evaluate(`${locate}.blur()`);
+}
+
 try {
   assert.equal(typeof WebSocket, "function", "UI smoke requires Node 22+ with WebSocket support");
   await build({ entryPoints: [join(tests, "ui-fixture.jsx")], bundle: true, platform: "browser", format: "iife", outfile: join(artifacts, "bundle.js"),
@@ -141,6 +161,9 @@ try {
 
   await navigate("running", 1280, 800);
   await click("后台任务列表");
+  await checkFeedback("最近结束任务");
+  await checkFeedback("刷新后台任务");
+  await checkFeedback(await evaluate("'查看日志 ' + window.uiTest.title"), "desktop-row-hover");
   assert.ok(await evaluate("!document.body.innerText.includes('completed-history-task') && !document.querySelector('[role=tablist]')"));
   assert.equal(await evaluate("window.uiTest.requests.length"), 0);
   await click(await evaluate("'查看日志 ' + window.uiTest.title"));
@@ -151,6 +174,8 @@ try {
   assert.equal(await evaluate("document.querySelector('aside').querySelector('[role=tablist], [aria-label=\"返回任务列表\"]')"), null);
   assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表弹层\"]')"), false);
   await screenshot("desktop");
+  await checkFeedback("任务详情");
+  await checkFeedback("复制已加载日志");
   await openTask(true);
   await waitFor("window.uiTest.savedTask() === window.uiTest.secondId && document.querySelector('aside').innerText.includes('任务二正常运行')");
   assert.equal(await evaluate("window.uiTest.requests.at(-1).taskId"), await evaluate("window.uiTest.secondId"));
@@ -215,6 +240,7 @@ try {
   await navigate("failed", 1280, 800);
   await waitFor("document.querySelector('[aria-label=\"任务完成通知\"]')?.innerText.includes('失败 · 退出码 1')");
   await screenshot("completion-failed");
+  await checkFeedback("查看日志 运行测试", "completion-hover");
   await click("查看日志 运行测试");
   await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
   assert.equal(await evaluate("window.uiTest.opens[0].agentId"), "test");
@@ -228,11 +254,12 @@ try {
   await screenshot("completion-success");
   console.log("PASS: failed completion shows the real result and reopens the correct log after closing");
 
-  await navigate("missing", 320, 700);
+  await navigate("missing", 1280, 800);
   await waitFor("document.body.innerText.includes('记录已删除或超过保留期限')");
   assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false);
   assert.equal(await evaluate("window.uiTest.opens.length"), 0);
   assert.ok(await evaluate("!document.body.innerText.includes('已完成')"));
+  await checkFeedback("任务结果不可用", undefined, true);
   console.log("PASS: expired or deleted results have no success claim or actionable log link");
 
   await navigate("running", 320, 700);
