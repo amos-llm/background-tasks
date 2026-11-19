@@ -61,13 +61,10 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   const lastScrollY = useRef(0);
   const loadRef = useRef<(direction: Direction) => Promise<void>>(async () => {});
   const [notice, setNotice] = useState<string | null>(null);
-  const [details, setDetails] = useState(false);
-  const [more, setMore] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
-  const [fontSize, setFontSize] = useState(13);
   useEffect(() => {
     let disposed = false, pending = false, replaceQueued = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -136,34 +133,32 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
   async function copyLocation() {
     try { await copyText(await logLocation(task.id)); setNotice("已复制主机上的原始日志路径"); }
     catch (err) { setNotice(String(err)); }
-    setMore(false);
   }
   async function remove() {
     setDeleting(true); setNotice(null);
     try { await onDelete(); }
-    catch (err) { setNotice(String(err)); setDeleting(false); setMore(false); }
+    catch (err) { setNotice(String(err)); setDeleting(false); setConfirmDelete(false); }
   }
   return <View style={styles.viewer}>
     <View style={styles.summary}>
-      <InteractivePressable theme={theme} accessibilityRole="button" accessibilityLabel="任务详情" accessibilityHint="展开完整命令、工作目录和日志信息"
-        accessibilityState={{ expanded: details }} aria-expanded={details} onPress={() => setDetails(value => !value)} style={styles.summaryTitle}>
+      <View style={styles.summaryTitle}>
         <View style={styles.titleLine}>
           <Text numberOfLines={1} style={[styles.taskTitle, styles.flexText, { color: colors.foreground }]}>{taskTitle(currentTask)}</Text>
-          <Icon name={details ? "ChevronUp" : "ChevronDown"} size={14} color={colors.foregroundMuted} />
         </View>
         <TaskStatus task={currentTask} theme={theme} />
-      </InteractivePressable>
+      </View>
       {(isActiveTask(currentTask) || currentTask.state === "unknown") && <Action label={stopping ? "终止中" : "终止"}
         compact={compact} danger disabled={stopping} theme={theme} onPress={onStop} />}
     </View>
-    {details && <ScrollView style={[styles.details, { backgroundColor: colors.surface2 }]} contentContainerStyle={styles.detailContent}>
+    <ScrollView style={[styles.details, { backgroundColor: colors.surface2 }]} contentContainerStyle={styles.detailContent}>
       <Text selectable style={[styles.command, { color: colors.foreground }]}>{currentTask.command}</Text>
       {currentTask.instruction && <Text selectable style={[styles.meta, { color: colors.foregroundMuted }]}>完成后：{currentTask.instruction}</Text>}
       <Text selectable style={[styles.meta, { color: colors.foregroundMuted }]}>
         工作目录：{currentTask.cwd}{"\n"}PID：{currentTask.pid ?? "—"} · 日志：{(totalBytes / 1024).toFixed(1)} KiB
         {"\n"}已加载字节：{window?.start ?? 0}–{window?.end ?? 0} · 显示窗口最多 2 MiB
       </Text>
-    </ScrollView>}
+      <Action label="复制原始日志路径" compact={compact} theme={theme} onPress={() => void copyLocation()} />
+    </ScrollView>
     <View style={styles.logToolbar}>
       <Text style={[styles.meta, { color: colors.foregroundMuted }]}>日志</Text>
       <View style={styles.primaryActions}>
@@ -172,7 +167,7 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         <Action label={searching ? "收起" : "搜索"} accessibilityLabel={searching ? "收起日志搜索" : "搜索日志"}
           compact={compact} theme={theme} onPress={toggleSearch} />
         <Action label="复制" accessibilityLabel="复制已加载日志" disabled={!text} compact={compact} theme={theme} onPress={() => void copy()} />
-        <Action label="更多" compact={compact} theme={theme} onPress={() => { setConfirmDelete(false); setMore(true); }} />
+        {!isActiveTask(currentTask) && <Action label="删除任务和日志" compact={compact} danger theme={theme} onPress={() => setConfirmDelete(true)} />}
       </View>
     </View>
     <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: hasNewOutput ? colors.accent : colors.foregroundMuted }]}>
@@ -205,27 +200,17 @@ function LogViewer({ agentId, task, theme, readLog, logLocation, compact, stoppi
         followingRef.current = false; setFollowing(false); void loadRef.current("before");
       }} />}
       {busy && !window ? <ActivityIndicator color={colors.foregroundMuted} />
-        : <Text selectable style={[styles.outputText, { color: colors.foreground, fontSize, lineHeight: Math.round(fontSize * 1.5) }]}>
+        : <Text selectable style={[styles.outputText, { color: colors.foreground }]}>
           {displayedText || (query ? "没有匹配的日志" : error ? "日志暂不可用，请重试" : isActiveTask(currentTask) ? "等待任务输出…" : "任务没有输出")}
         </Text>}
       {!following && window && window.end < totalBytes && <Action label="加载较新日志" disabled={busy} compact={compact} theme={theme}
         onPress={() => void loadRef.current("after")} />}
     </ScrollView>
-    <Modal title={confirmDelete ? "删除任务和日志" : "日志操作"} open={more} onOpenChange={open => { if (!deleting) setMore(open); }}>
+    <Modal title="删除任务和日志" open={confirmDelete} onOpenChange={open => { if (!deleting) setConfirmDelete(open); }}>
       <Modal.Content>
-        {confirmDelete ? <>
-          <Text style={{ color: colors.foreground }}>将永久删除此任务的记录和日志，无法撤销。</Text>
-          <Action label={deleting ? "删除中…" : "确认永久删除"} danger compact theme={theme} disabled={deleting} onPress={() => void remove()} />
-          <Action label="取消" compact theme={theme} disabled={deleting} onPress={() => setConfirmDelete(false)} />
-        </> : <>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Text style={[styles.meta, styles.flexText, { color: colors.foregroundMuted }]}>日志字号 · {fontSize}</Text>
-            <Action label="A−" accessibilityLabel="减小日志字号" compact theme={theme} disabled={fontSize <= 11} onPress={() => setFontSize(size => size - 1)} />
-            <Action label="A+" accessibilityLabel="增大日志字号" compact theme={theme} disabled={fontSize >= 18} onPress={() => setFontSize(size => size + 1)} />
-          </View>
-          <Action label="复制原始日志路径" compact theme={theme} onPress={() => void copyLocation()} />
-          {!isActiveTask(currentTask) && <Action label="删除任务和日志" compact danger theme={theme} onPress={() => setConfirmDelete(true)} />}
-        </>}
+        <Text style={{ color: colors.foreground }}>将永久删除此任务的记录和日志，无法撤销。</Text>
+        <Action label={deleting ? "删除中…" : "确认永久删除"} danger compact theme={theme} disabled={deleting} onPress={() => void remove()} />
+        <Action label="取消" compact theme={theme} disabled={deleting} onPress={() => setConfirmDelete(false)} />
       </Modal.Content>
     </Modal>
   </View>;
@@ -279,6 +264,6 @@ const styles = StyleSheet.create({
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   output: { flex: 1, minHeight: 0, borderRadius: 6 },
   outputContent: { padding: 10, gap: 8 },
-  outputText: { fontFamily: monoFont, fontSize: 12, lineHeight: 18 },
+  outputText: { fontFamily: monoFont, fontSize: 13, lineHeight: 20 },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
 });

@@ -177,7 +177,8 @@ try {
   assert.equal(await evaluate("innerWidth"), 390, "mobile toolbar must not expand the viewport");
   const controls = await evaluate("[...document.querySelector('aside').querySelectorAll('[role=button]')].filter(el=>!el.closest('header')&&el.getBoundingClientRect().top>=0&&el.getBoundingClientRect().top<180).map(el=>({height:el.getBoundingClientRect().height,right:el.getBoundingClientRect().right}))");
   assert.ok(controls.every(control => control.height >= 44 && control.right <= 390));
-  assert.equal(await evaluate("!!document.querySelector('[aria-expanded=true]')"), false, "long command details should start collapsed");
+  assert.ok(await evaluate("document.querySelector('aside').innerText.includes(window.uiTest.command) && document.querySelector('aside').innerText.includes('工作目录：')"), "full command and directory should be visible immediately");
+  assert.equal(await evaluate("!!document.querySelector('aside [aria-expanded], aside [aria-label=\"任务详情\"]')"), false, "task details should have no collapse control");
   await screenshot("mobile");
   await evaluate("(() => { const el = [...document.querySelectorAll('aside *')].find(el => el.scrollHeight > el.clientHeight + 100 && el.innerText.includes('第 200 行')); el.scrollTop = 0; el.dispatchEvent(new Event('scroll', { bubbles: true })); })()"); await waitFor("document.body.innerText.includes('已暂停跟随')"); await delay(600);
   const requestsBefore = await evaluate("window.uiTest.requests.length");
@@ -202,13 +203,11 @@ try {
   assert.equal(await evaluate("document.querySelector('aside').querySelector('[role=tablist], [aria-label=\"返回任务列表\"]')"), null);
   assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表弹层\"]')"), false);
   await screenshot("desktop");
-  await checkFeedback("任务详情");
   await checkFeedback("复制已加载日志");
   await openTask(true);
   await waitFor("window.uiTest.savedTask() === window.uiTest.secondId && document.querySelector('aside').innerText.includes('任务二正常运行')");
   assert.equal(await evaluate("window.uiTest.requests.at(-1).taskId"), await evaluate("window.uiTest.secondId"));
   assert.ok(await evaluate("document.querySelector('aside').innerText.includes('开发服务')"));
-  await click("任务详情");
   assert.ok(await evaluate("document.querySelector('aside').innerText.includes('npm run dev -- --port 3000') && document.querySelector('aside').innerText.includes('完成后：检查服务退出原因。')"));
   console.log("PASS: running-only list opens logs beside the conversation, closes the popover, and switches the saved task");
 
@@ -244,13 +243,11 @@ try {
   await click(await evaluate("'查看日志 ' + window.uiTest.title"));
   await waitFor("document.body.innerText.includes('第 200 行')");
   assert.equal(await evaluate("innerWidth"), 320);
-  await click("任务详情");
   assert.ok(await evaluate("document.body.innerText.includes('工作目录：')"));
   await evaluate("window.uiTest.finish()");
   await waitFor("document.body.innerText.includes('日志已结束')");
-  await click("更多");
-  assert.ok(await evaluate("!!document.querySelector('[role=dialog]')"));
   await click("删除任务和日志"); assert.equal(await evaluate("window.uiTest.deleted"), 0);
+  assert.ok(await evaluate("!!document.querySelector('[role=dialog]')"));
   await click("取消"); await click("删除任务和日志"); await click("确认永久删除");
   await waitFor("document.body.innerText.includes('从后台任务列表选择任务查看日志')");
   assert.equal(await evaluate("window.uiTest.deleted"), 1);
@@ -311,12 +308,11 @@ try {
   await screenshot("mobile-search");
   await click("收起日志搜索");
   await waitFor("document.body.innerText.includes('第 198 行')");
-  await click("更多");
-  await click("增大日志字号");
-  assert.ok(await evaluate("document.body.innerText.includes('日志字号 · 14')"));
-  await click("关闭");
+  await click("复制原始日志路径");
+  assert.equal(await evaluate("window.uiTest.copied"), "/test/output.log");
+  assert.ok(await evaluate("![...document.querySelectorAll('[role=button]')].some(el => ['更多', '增大日志字号', '减小日志字号'].includes(el.getAttribute('aria-label')))"));
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
-  console.log("PASS: 320px pause, copy, loaded-log search and font adjustment");
+  console.log("PASS: 320px pause, copy, loaded-log search and direct log path copying without a more menu");
   console.log("UI screenshots:", artifacts);
 } finally {
   socket?.close();
