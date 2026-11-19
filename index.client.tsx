@@ -7,6 +7,7 @@ import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
 import { CompletionNotice, completionNoticeSchema } from "./client/completion-notice";
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
 import { taskPillPresentation } from "./client/task-presentation";
+import { startNoticeKind, transformTaskStart } from "./client/start-transform";
 
 // The SDK requires an icon field; render no element for a text-only pill.
 function NoPillIcon() { return null; }
@@ -14,6 +15,8 @@ function NoPillIcon() { return null; }
 export default function contribute(client: PluginClientContext) {
   const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
   const removeNoticeTransformer = client.addTimelineTransformer({ id: "background-task-completion", query: { itemType: "user_message" }, transform: ({ item }) => transformCompletionNotice(item) });
+  const removeStartRenderer = client.addTimelineRenderer({ kind: startNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
+  const removeStartTransformer = client.addTimelineTransformer({ id: "background-task-start", query: { itemType: "tool_call" }, transform: ({ item }) => transformTaskStart(item) });
   let disposed = false;
   const states = new Map<string, TaskListState>();
   const pills = new Map<string, PluginButtonRegistration>();
@@ -61,9 +64,18 @@ export default function contribute(client: PluginClientContext) {
 
   function TaskCompletion(props: PluginTimelineItemProps<{ taskIds: string[] }>) {
     useActions(props.agentId);
+    const [resolved, setResolved] = useState(false);
+    const ids = props.item.data.taskIds.join(",");
+    useEffect(() => {
+      let mounted = true;
+      setResolved(false);
+      void refresh(props.agentId).finally(() => { if (mounted) setResolved(true); });
+      return () => { mounted = false; };
+    }, [props.agentId, ids]);
     const state = states.get(props.agentId);
     return <CompletionNotice taskIds={props.item.data.taskIds} tasks={state?.managedTasks ?? []}
-      theme={props.theme} compact={props.layout.compact} loading={!state || state.loading} error={state?.error}
+      caption={props.item.kind === startNoticeKind ? "后台任务已启动" : undefined}
+      theme={props.theme} compact={props.layout.compact} loading={!resolved || !state || state.loading} error={state?.error}
       onOpen={taskId => openLogs(props.agentId, taskId)} onRetry={() => void refresh(props.agentId)} />;
   }
 
@@ -148,5 +160,5 @@ export default function contribute(client: PluginClientContext) {
     return () => { unsubscribe(); void result.subscription.release(); };
   }).catch((error) => console.error("Background task subscription failed", error));
   const timer = setInterval(() => { for (const id of states.keys()) void refresh(id); }, 2000);
-  return async () => { disposed = true; clearInterval(timer); removeLog(); removeNoticeTransformer(); removeNoticeRenderer(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
+  return async () => { disposed = true; clearInterval(timer); removeLog(); removeStartTransformer(); removeStartRenderer(); removeNoticeTransformer(); removeNoticeRenderer(); for (const pill of pills.values()) pill.remove(); (await subscription)?.(); listeners.clear(); };
 }

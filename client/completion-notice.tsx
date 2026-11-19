@@ -4,17 +4,18 @@ import { Icon } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import { z } from "zod";
 
-import type { ManagedTask } from "../shared/managed";
+import { isActiveTask, type ManagedTask } from "../shared/managed";
 import { stateLabels, taskTitle, taskTone } from "./task-presentation";
 
 export const completionNoticeSchema = z.object({ taskIds: z.array(z.string().uuid()).max(8).default([]) });
 
-export function CompletionNotice({ taskIds, tasks, theme, loading, error, compact, onOpen, onRetry }: {
+export function CompletionNotice({ taskIds, tasks, theme, loading, error, compact, caption, onOpen, onRetry }: {
   taskIds: string[]; tasks: ManagedTask[]; theme: PluginTheme; loading: boolean; error?: string | null;
-  compact: boolean; onOpen(taskId: string): void; onRetry(): void;
+  compact: boolean; caption?: string; onOpen(taskId: string): void; onRetry(): void;
 }) {
   const colors = theme.colors;
   return <View style={{ gap: 6, paddingVertical: 8, width: "100%", maxWidth: 480, alignSelf: "flex-start" }}>
+    {caption && <Text style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 18 }}>{caption}</Text>}
     {taskIds.length === 0 && <Text style={{ color: colors.foregroundMuted, fontSize: 13 }}>后台任务已结束</Text>}
     {taskIds.map(id => {
       const task = tasks.find(task => task.id === id);
@@ -27,7 +28,7 @@ export function CompletionNotice({ taskIds, tasks, theme, loading, error, compac
           paddingVertical: 9, minHeight: compact ? 48 : 44, borderRadius: 6,
           borderWidth: 1, borderColor: colors.border, backgroundColor: pressed ? colors.surface2 : colors.surface1,
         })}>
-        <Icon name={failed ? "CircleAlert" : task?.state === "completed" ? "CheckCircle" : "CircleHelp"} size={16} color={color} />
+        <Icon name={task && isActiveTask(task) ? "Play" : failed ? "CircleAlert" : task?.state === "completed" ? "CheckCircle" : "CircleHelp"} size={16} color={color} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>
             {task ? taskTitle(task) : "后台任务"}

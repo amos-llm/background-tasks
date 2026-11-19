@@ -126,6 +126,31 @@ try {
     await waitFor("document.body.innerText.includes('第 200 行')");
   }
 
+  await navigate("started", 1280, 800);
+  await waitFor("document.querySelector('[aria-label=\"任务启动通知\"]')?.innerText.includes('运行中')");
+  assert.ok(await evaluate("document.querySelector('[aria-label=\"任务启动通知\"]').innerText.includes('后台任务已启动') && document.querySelector('[aria-label=\"任务启动通知\"]').innerText.includes('运行测试')"));
+  assert.equal(await evaluate("window.uiTest.requests.length"), 0, "start cards must not open or read logs automatically");
+  await screenshot("task-started");
+  await checkFeedback("查看日志 运行测试", "task-started-hover");
+  await click("查看日志 运行测试");
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  assert.equal(await evaluate("window.uiTest.requests[0].taskId"), await evaluate("window.uiTest.taskId"));
+  await evaluate("window.uiTest.finish()");
+  await waitFor("document.querySelector('[aria-label=\"任务启动通知\"]')?.innerText.includes('已完成 · 退出码 0')");
+  assert.ok(await evaluate("!document.querySelector('[aria-label=\"任务启动通知\"]').innerText.includes('运行中')"));
+  await click("关闭日志");
+  await click("查看日志 运行测试");
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  console.log("PASS: task_start result renders a live card, opens the exact log and stays usable after completion");
+
+  await navigate("started", 320, 700);
+  await waitFor("document.querySelector('[aria-label=\"任务启动通知\"]')?.innerText.includes('运行中')");
+  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+  await screenshot("task-started-mobile");
+  await click("查看日志 运行测试");
+  await waitFor("document.querySelector('aside')?.innerText.includes('第 200 行')");
+  console.log("PASS: task start cards fit 320px screens and link to logs");
+
   await navigate("external-only", 1280, 800);
   assert.equal(await evaluate("!!document.querySelector('[aria-label=\"后台任务列表\"]')"), false, "external processes alone must not create a pill");
   assert.ok(await evaluate("!window.uiTest.rpcCalls.includes('tasks.list')"), "the client must not scan external processes");

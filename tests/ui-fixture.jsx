@@ -13,9 +13,12 @@ const task = {
 };
 const second = { ...task, id: "e24c2613-f14b-463b-9def-880fc8d37204", command: "npm run dev -- --port 3000", label: "开发服务", instruction: "检查服务退出原因。" };
 if (mode === "failed") { task.state = "failed"; task.endedAt = Date.now(); task.exitCode = 1; task.label = "运行测试"; second.state = "completed"; second.endedAt = Date.now(); second.exitCode = 0; }
+if (mode === "started") { task.label = "运行测试"; task.command = "npm test"; }
+const startResult = { structuredContent: { task: { ...task } } };
 const tasks = mode === "external-only" || mode === "missing" ? [] : [task, second, { ...task, label: "历史任务", id: "8bad3d3d-5191-473e-af32-54051b5dc022", command: "completed-history-task", state: "completed", endedAt: Date.now(), exitCode: 0 }];
 const agent = { id: "test", workspaceId: "workspace", provider: "pi" };
-let update = () => {}, pill = null, log = null, notice = null, transform = null, popoverOpen = false, sidebarOpen = mode === "restore";
+let update = () => {}, pill = null, log = null, popoverOpen = false, sidebarOpen = mode === "restore";
+const renderers = new Map(), transformers = new Map();
 const tab = { state: mode === "restore" ? { taskId: second.id } : {}, setState(state) { this.state = state; } };
 window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 0, copied: null, taskId: task.id, secondId: second.id, secondLabel: second.label, title: task.label ?? "后台命令", command: task.command,
   finish() { for (const item of tasks) { item.state = "completed"; item.endedAt = Date.now(); item.exitCode = 0; } },
@@ -25,8 +28,8 @@ window.uiTest = { rpcCalls: [], requests: [], opens: [], commands: [], deleted: 
 // Run the real client contribution. Only the Paseo host and RPC boundary are
 // simulated, so list clicks, sidebar routing, selection and live refresh are real.
 contribute({
-  addTimelineRenderer(entry) { if (!/^[a-z][a-z0-9-]*$/.test(entry.kind)) throw new Error("Invalid timeline renderer kind"); notice = entry; return () => {}; },
-  addTimelineTransformer(entry) { transform = entry.transform; return () => {}; },
+  addTimelineRenderer(entry) { if (!/^[a-z][a-z0-9-]*$/.test(entry.kind)) throw new Error("Invalid timeline renderer kind"); renderers.set(entry.kind, entry); return () => renderers.delete(entry.kind); },
+  addTimelineTransformer(entry) { transformers.set(entry.query.itemType, entry.transform); return () => transformers.delete(entry.query.itemType); },
   addAgentPanel(entry) { log = entry; return () => { log = null; update(); }; },
   addCommandCenterItem(entry) { window.uiTest.commands.push(entry.id); return () => {}; },
   addComposerPill(entry) {
@@ -64,13 +67,17 @@ function App() {
   update = () => render(value => value + 1);
   const compact = innerWidth < 720;
   const host = { theme: { colors }, layout: { compact, platform: "web" }, host: { id: "test", label: "Test" }, workspaceId: agent.workspaceId };
-  const List = pill?.behavior.Content, Log = log?.Component, Notice = notice?.Component;
+  const notice = renderers.get("background-tasks-completion"), start = renderers.get("background-tasks-started");
+  const List = pill?.behavior.Content, Log = log?.Component, Notice = notice?.Component, StartNotice = start?.Component;
   const PillIcon = typeof pill?.icon === "function" ? pill.icon : null;
-  const noticeItem = transform?.({ item: { type: "user_message", clientMessageId: "background-tasks:test", text: `后台任务已完成：${task.id}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。` }, phase: "complete" })?.items[0];
+  const noticeItem = transformers.get("user_message")?.({ item: { type: "user_message", clientMessageId: "background-tasks:test", text: `后台任务已完成：${task.id}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。` }, phase: "complete" })?.items[0];
+  const startItem = transformers.get("tool_call")?.({ item: { type: "tool_call", callId: "start-fixture", name: "paseo.task_start", status: "completed", error: null,
+    detail: { type: "unknown", input: { command: task.command }, output: startResult } }, phase: "complete" })?.items[0];
   return <div style={{ display: "flex", flex: 1, minHeight: 0, position: "relative", width: "100%" }}>
     <main aria-label="对话" style={{ display: compact && sidebarOpen ? "none" : "flex", flexDirection: "column", flex: 1, minWidth: 0, padding: 16 }}>
       <div style={{ flex: 1 }}>对话内容
         {["failed", "missing"].includes(mode) && Notice && noticeItem && <div aria-label="任务完成通知"><Notice {...host} agentId={agent.id} item={{ ...noticeItem, data: notice.schema.parse(noticeItem.data) }} timestamp={new Date()} /></div>}
+        {mode === "started" && StartNotice && startItem && <div aria-label="任务启动通知"><StartNotice {...host} agentId={agent.id} item={{ ...startItem, data: start.schema.parse(startItem.data) }} timestamp={new Date()} /></div>}
       </div>
       {pill && <button role="button" aria-label="后台任务列表" title={pill.title}
         style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, maxWidth: 152,
