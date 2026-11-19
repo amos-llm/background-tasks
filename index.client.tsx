@@ -9,9 +9,6 @@ import { completionNoticeKind, transformCompletionNotice } from "./client/comple
 import { taskPillPresentation } from "./client/task-presentation";
 import { startNoticeKind, transformTaskStart } from "./client/start-transform";
 
-// The SDK requires an icon field; render no element for a text-only pill.
-function NoPillIcon() { return null; }
-
 export default function contribute(client: PluginClientContext) {
   const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
   const removeNoticeTransformer = client.addTimelineTransformer({ id: "background-task-completion", query: { itemType: "user_message" }, transform: ({ item }) => transformCompletionNotice(item) });
@@ -35,7 +32,7 @@ export default function contribute(client: PluginClientContext) {
       const presentation = { label };
       if (pill) pill.update(presentation);
       else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
-        button: { title: "后台任务", icon: NoPillIcon, ...presentation, behavior: { kind: "popover", Content: TaskList } } }));
+        button: { title: "后台任务", icon: "Terminal", ...presentation, behavior: { kind: "popover", Content: TaskList } } }));
     } else if (pill) { pill.remove(); pills.delete(agentId); }
     for (const listener of listeners) listener();
   }

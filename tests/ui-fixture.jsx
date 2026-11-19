@@ -80,12 +80,14 @@ function App() {
         {mode === "started" && StartNotice && startItem && <div aria-label="任务启动通知"><StartNotice {...host} agentId={agent.id} item={{ ...startItem, data: start.schema.parse(startItem.data) }} timestamp={new Date()} /></div>}
       </div>
       {pill && <button role="button" aria-label="后台任务列表" title={pill.title}
-        style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, maxWidth: 152,
+        style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8, maxWidth: 152,
           padding: "6px 8px", border: "1px solid #333b4b", borderRadius: 6, background: "#171c26", color: "#e7e9ef", fontSize: 12 }}
         onClick={() => { popoverOpen = !popoverOpen; update(); }}>
+        <span data-testid="pill-icon-slot" aria-hidden="true" style={{ width: 16, height: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
         {PillIcon ? <PillIcon {...host} context="agent" agentId={agent.id} size={14} color={colors.foreground} /> : <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth="2">
           {pill.icon === "CircleAlert" ? <><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 3v1" /></> : <path d="m5 6 6 6-6 6m8 0h6" />}
         </svg>}
+        </span>
         <span data-testid="pill-label" style={{ minWidth: 0, maxWidth: 112, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pill.label}</span>
       </button>}
     </main>
