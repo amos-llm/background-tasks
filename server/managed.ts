@@ -8,6 +8,7 @@ import { z } from "zod";
 import { isActiveTask, managedTaskSchema, taskIdSchema, type LogPage, type ManagedTask, type taskStartInput } from "../shared/managed";
 import { readProcess, snapshot } from "./processes";
 import { runnerSource } from "./runner";
+import { assertUnfilteredTaskCommand } from "./command-policy";
 
 const recordSchema = managedTaskSchema.omit({ logBytes: true, notificationStatus: true }).extend({
   agentId: z.string(), runnerPid: z.number().nullable(), runnerStart: z.string().nullable(),
@@ -172,6 +173,7 @@ export class ManagedTaskStore {
   private async startUnlocked(owner: TaskOwner, input: StartOptions) {
     if (process.platform !== "linux") throw new Error("受管后台任务需要 Linux 主机");
     if (owner.provider !== "codex" && owner.provider !== "pi") throw new Error("仅支持 Codex 和 Pi 会话");
+    assertUnfilteredTaskCommand(input.command);
     const cwd = await realpath(resolve(owner.cwd, input.cwd ?? "."));
     if (!(await stat(cwd)).isDirectory()) throw new Error("工作目录不存在");
     await mkdir(this.root, { recursive: true, mode: 0o700 });

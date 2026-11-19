@@ -88,6 +88,31 @@ test("full output survives tail/filter queries, UTF-8 pages and a new store inst
   await assert.rejects(store.readLog(owner.id, task.id, { after: -1 }));
 });
 
+test("filtered commands are rejected before execution or task creation; retry keeps full live output", async t => {
+  const { store, owner, root } = await fixture(t);
+  const marker = join(root, "must-not-exist");
+  const rejected = node(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'started'); console.log('line');`) + " 2>&1 | tail -1";
+  await assert.rejects(store.start(owner, { command: rejected }), /task_start rejected.*task_logs/);
+  await assert.rejects(stat(marker), { code: "ENOENT" });
+  assert.deepEqual(await store.list(owner.id), []);
+  const command = node("for(let i=0;i<100;i++) console.log('early-'+i); console.error('live-stderr'); setTimeout(()=>console.log('late'),700);");
+  const task = await store.start(owner, { command });
+  let live = await store.readLog(owner.id, task.id);
+  for (let attempt = 0; attempt < 30 && !live.text.includes('live-stderr'); attempt++) {
+    await delay(10); live = await store.readLog(owner.id, task.id);
+  }
+  assert.equal(live.task.state, "running");
+  assert.ok(live.text.includes("early-0\n"));
+  assert.ok(live.text.includes("early-99\n"));
+  assert.ok(live.text.includes("live-stderr\n"));
+  assert.equal((await store.tail(owner.id, task.id, { tailLines: 1, filter: "early-" })).text, "early-99");
+  await finished(store, owner.id, task.id);
+  const full = await store.readLog(owner.id, task.id);
+  assert.ok(full.text.startsWith("early-0\n"));
+  assert.ok(full.text.endsWith("late\n"));
+  assert.equal(full.task.command, command);
+});
+
 test("runner and task outlive the process that started them", async t => {
   const { root, owner, store } = await fixture(t);
   const source = `import {ManagedTaskStore} from ${JSON.stringify(join(process.cwd(), "server/managed.ts"))};
@@ -220,7 +245,7 @@ test("the same attached tool definitions execute for Pi and Codex and isolate ca
     assert.equal(guided.env, creation.env);
     assert.equal(guided.config.model, "test-model");
     assert.ok(guided.config.systemPrompt.startsWith(`${existingConfig.systemPrompt}\n\n`));
-    for (const text of ["task_start", "discovery/search", "mcp__paseo__task_start", "task_logs", "task_stop", "task_list", "Short commands", "sandbox", "exit code"]) {
+    for (const text of ["task_start", "discovery/search", "mcp__paseo__task_start", "task_logs", "task_stop", "task_list", "Short commands", "sandbox", "exit code", "user's live logs", "npm test 2>&1 | tail -50", "Do not bypass rejection"]) {
       assert.ok(guided.config.systemPrompt.includes(text), text);
     }
     // The daemon persists config.systemPrompt for resume and may pass it to children.
@@ -232,6 +257,7 @@ test("the same attached tool definitions execute for Pi and Codex and isolate ca
     const tools = new Map<string, AgentToolDefinition>(attached.tools.map((tool: AgentToolDefinition) => [tool.name, tool]));
     const context = { agent, paseo: { agents: { ref: () => ({ refresh: async () => {}, current: () => ({ provider, status: "running" }) }) } } as any, signal: new AbortController().signal };
     const start = tools.get("task_start")!;
+    await assert.rejects(async () => start.execute(start.input.parse({ command: "npm test | tail -20" }), context), /task_logs/);
     const result = await start.execute(start.input.parse({ command: "printf 'original output\n'" }), context);
     const task = (result.structuredContent as any).task;
     await finished(store, agent.id, task.id);

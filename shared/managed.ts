@@ -44,7 +44,7 @@ export const taskLogLocation = defineRpc({
   output: z.object({ path: z.string() }),
 });
 export const taskStartInput = z.object({
-  command: z.string().trim().min(1).max(65536).describe("Original foreground command. Do not append &, tail or output-limiting grep; use task_logs to inspect output."),
+  command: z.string().trim().min(1).max(65536).describe("Original foreground command with full stdout/stderr. No output-limiting pipes such as npm test | tail or npm run dev | grep: common filters are rejected before execution. Retry without the filter; use task_logs tailLines/filter/before to limit only the agent's view. Do not bypass with another shell tool."),
   cwd: z.string().min(1).optional().describe("Working directory; defaults to the calling agent's directory."),
   timeoutSeconds: z.number().int().min(1).max(604800).optional(),
   label: z.string().trim().min(1).max(120).optional().describe("Short task name."),
