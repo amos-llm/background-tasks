@@ -2,10 +2,11 @@ import type { PluginButtonRegistration, PluginClientContext, PluginButtonContent
 import { useEffect, useState } from "react";
 
 import { TaskPopover, type TaskListState } from "./client/task-list";
-import { deleteManagedTask, isActiveTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
+import { deleteManagedTask, listManagedTasks, readTaskLog, stopManagedTask, taskLogLocation, type ManagedTask } from "./shared/managed";
 import { TaskLogSidebar, type ReadLog } from "./client/managed-tasks";
 import { CompletionNotice, completionNoticeSchema } from "./client/completion-notice";
 import { completionNoticeKind, transformCompletionNotice } from "./client/completion-transform";
+import { taskPillLabel } from "./client/task-presentation";
 
 export default function contribute(client: PluginClientContext) {
   const removeNoticeRenderer = client.addTimelineRenderer({ kind: completionNoticeKind, version: 1, schema: completionNoticeSchema, Component: TaskCompletion });
@@ -23,9 +24,8 @@ export default function contribute(client: PluginClientContext) {
     const state = states.get(agentId);
     const agent = agents.get(agentId);
     const pill = pills.get(agentId);
-    const count = state ? state.managedTasks.filter(isActiveTask).length : 0;
     if (state && agent?.workspaceId && state.managedTasks.length > 0) {
-      const label = state.error ? "后台任务 · !" : count > 0 ? `后台任务 · ${count}` : `任务记录 · ${state.managedTasks.length}`;
+      const label = taskPillLabel(state.managedTasks, !!state.error);
       if (pill) pill.update({ label });
       else pills.set(agentId, client.addComposerPill({ id: `tasks-${agentId}`, workspaceId: agent.workspaceId, agentId,
         button: { title: "后台任务", label, icon: "Terminal", behavior: { kind: "popover", Content: TaskList } } }));

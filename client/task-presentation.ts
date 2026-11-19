@@ -11,6 +11,20 @@ export function taskTone(state: ManagedTask["state"]) {
   if (state === "running" || state === "starting") return "accent";
   return "foregroundMuted";
 }
+export function taskPillLabel(tasks: readonly Pick<ManagedTask, "state">[], stale = false) {
+  const counts: Record<ManagedTask["state"], number> = {
+    starting: 0, running: 0, completed: 0, failed: 0, stopped: 0,
+    timed_out: 0, log_limit: 0, error: 0, unknown: 0,
+  };
+  for (const task of tasks) counts[task.state]++;
+  const parts = ["后台任务", `运行中 ${counts.starting + counts.running}`, `已完成 ${counts.completed}`];
+  const failed = counts.failed + counts.timed_out + counts.log_limit + counts.error;
+  if (failed) parts.push(`失败 ${failed}`);
+  if (counts.stopped) parts.push(`已终止 ${counts.stopped}`);
+  if (counts.unknown) parts.push(`状态未知 ${counts.unknown}`);
+  if (stale) parts.push("更新失败");
+  return parts.join(" · ");
+}
 export function taskTitle(task: Pick<ManagedTask, "label" | "command">) {
   if (task.label?.trim()) return task.label.trim();
   const command = task.command.trim();
