@@ -76,13 +76,17 @@ export class TaskCompletionNotifier {
         await agent.refresh();
         const latest = agent.current();
         if (!latest || latest.archivedAt || latest.status !== "idle" || latest.activeTurn || latest.pendingPermissions?.length || this.disposed) continue;
-        const ready = [];
+        const ready: { eventId: string; taskId: string; task: Awaited<ReturnType<ManagedTaskStore["get"]>> }[] = [];
         for (const event of events) {
-          if ((await this.store.get(agentId, event.taskId)).notificationStatus === "pending") ready.push(event);
+          const task = await this.store.get(agentId, event.taskId);
+          if (task.notificationStatus !== "pending" || isActiveTask(task)) continue;
+          const candidate = [...ready, { ...event, task }];
+          if (ready.length && Buffer.byteLength(completionMessage(candidate.map(item => item.task))) > 32768) break;
+          ready.push({ ...event, task });
         }
         if (!ready.length || this.disposed) continue;
         const messageId = `background-tasks:${createHash("sha256").update(ready.map(event => event.eventId).join("\n")).digest("hex")}`;
-        await agent.send(`后台任务已完成：${ready.map(event => event.taskId).join(", ")}。请用 task_status 获取结果和指令，按指令继续；需要输出时使用 task_logs。`, { messageId, activeTurnBehavior: "steer" });
+        await agent.send(completionMessage(ready.map(event => event.task)), { messageId, activeTurnBehavior: "steer" });
         for (const event of ready) {
           await this.store.settleNotification(agentId, event.taskId, "delivered").catch(this.onError);
         }
@@ -100,4 +104,9 @@ export class TaskCompletionNotifier {
     clearTimeout(this.timer); this.timer = undefined;
     await this.flushing;
   }
+}
+
+function completionMessage(tasks: Awaited<ReturnType<ManagedTaskStore["get"]>>[]) {
+  const results = tasks.map(({ id, label, state, exitCode, exitSignal, instruction }) => ({ taskId: id, label: label ?? null, state, exitCode, exitSignal, instruction: instruction ?? null }));
+  return `后台任务已完成：${tasks.map(task => task.id).join(", ")}。请根据以下结果和后续指令继续；需要输出时使用 task_logs，需要其他详情时使用 task_status。\n${JSON.stringify({ results })}`;
 }

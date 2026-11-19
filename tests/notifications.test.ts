@@ -52,9 +52,9 @@ async function fixture(t: TestContext) {
   return { root, store, owner, snapshots, current: snapshots.get(owner.id), paseo, notifier, sent, errors, attemptedMessages,
     failNext: () => { failures++; }, attempts: () => attempts };
 }
-const events = (message: { text: string }) => (message.text.match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? []).map(taskId => ({ taskId }));
+const events = (message: { text: string }) => (message.text.split("。")[0].match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? []).map(taskId => ({ taskId }));
 
-test("busy agents queue results; idle delivery sends short notices with results available through task status", async t => {
+test("busy agents queue results; idle delivery includes each result and instruction", async t => {
   const f = await fixture(t);
   const first = await f.store.start(f.owner, { command: node("for(let i=0;i<300;i++)console.log('line-'+i)"), label: "Tests", instruction: "Inspect failures and continue." });
   const second = await f.store.start(f.owner, { command: "printf 'failure-marker\\n'; exit 7" });
@@ -68,8 +68,11 @@ test("busy agents queue results; idle delivery sends short notices with results 
   assert.equal(f.sent.length, 1);
   const delivered = events(f.sent[0]);
   assert.deepEqual(new Set(delivered.map(event => event.taskId)), new Set([first.id, second.id]));
-  assert.ok(f.sent[0].text.includes("task_status"));
-  assert.ok(!f.sent[0].text.includes("line-299") && !f.sent[0].text.includes("Inspect failures"));
+  const results = JSON.parse(f.sent[0].text.split("\n")[1]).results;
+  assert.deepEqual(results.find((result: any) => result.taskId === first.id), { taskId: first.id, label: "Tests", state: "completed", exitCode: 0, exitSignal: null, instruction: "Inspect failures and continue." });
+  assert.equal(results.find((result: any) => result.taskId === second.id).exitCode, 7);
+  assert.equal(results.find((result: any) => result.taskId === second.id).state, "failed");
+  assert.ok(!f.sent[0].text.includes("line-299"));
   assert.equal((await f.store.get(f.owner.id, first.id)).instruction, "Inspect failures and continue.");
   assert.equal((await f.store.get(f.owner.id, second.id)).exitCode, 7);
   assert.equal(f.sent[0].options.activeTurnBehavior, "steer");
@@ -153,7 +156,7 @@ test("closed or permission-blocked agents are not woken; archiving cancels pendi
   assert.equal((await f.store.get(f.owner.id, task.id)).notificationStatus, "cancelled");
 });
 
-test("large output and instructions stay out of completion notices without dropping completions", async t => {
+test("large instructions are delivered intact in bounded batches without including output", async t => {
   const f = await fixture(t);
   const tasks = [];
   for (let i = 0; i < 8; i++) {
@@ -163,11 +166,15 @@ test("large output and instructions stay out of completion notices without dropp
   f.current.status = "idle";
   for (let i = 0; i < 8 && (await f.store.pendingCompletions()).length; i++) await f.notifier.flush();
   assert.equal((await f.store.pendingCompletions()).length, 0);
-  assert.equal(f.sent.length, 1);
+  assert.ok(f.sent.length > 1);
   const delivered = f.sent.flatMap(message => events(message));
   assert.deepEqual(new Set(delivered.map(event => event.taskId)), new Set(tasks.map(task => task.id)));
   assert.equal(delivered.length, tasks.length);
-  for (const message of f.sent) { assert.ok(Buffer.byteLength(message.text) <= 32768); assert.ok(!message.text.includes("�")); }
+  for (const message of f.sent) {
+    assert.ok(Buffer.byteLength(message.text) <= 32768); assert.ok(!message.text.includes("�"));
+    assert.ok(!message.text.includes("中文"));
+    for (const result of JSON.parse(message.text.split("\n")[1]).results) assert.equal(result.instruction, "\u0001".repeat(2000));
+  }
 });
 
 test("legacy records are not replayed and cancelled turns suppress future completion wakes", async t => {

@@ -8,6 +8,8 @@ test("completion notices render as a compact timeline item without changing ordi
   assert.equal(notice?.items[0].kind, "background-tasks-completion");
   assert.deepEqual(notice?.items[0].data, { taskIds: ["f33f3f90-59cb-46f3-9bac-603f43cde46d"] });
   assert.ok(transformCompletionNotice({ type: "user_message", text: "notification", clientMessageId: "background-tasks:abc" }));
+  const updated = `后台任务已完成：f33f3f90-59cb-46f3-9bac-603f43cde46d。请根据以下结果和后续指令继续；需要输出时使用 task_logs，需要其他详情时使用 task_status。\n${JSON.stringify({ results: [{ taskId: "f33f3f90-59cb-46f3-9bac-603f43cde46d", state: "completed", exitCode: 0 }] })}`;
+  assert.deepEqual(transformCompletionNotice({ type: "user_message", text: updated })?.items[0].data, { taskIds: ["f33f3f90-59cb-46f3-9bac-603f43cde46d"] });
   assert.equal(transformCompletionNotice({ type: "user_message", text: "后台任务已完成：请检查。" }), undefined);
   assert.equal(transformCompletionNotice({ type: "user_message", text: "hello" }), undefined);
 });
